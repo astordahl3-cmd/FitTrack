@@ -12,6 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { getDailySummary, getWeightEntries, getProfile, addFood, getFoodLibrary, addFoodLibraryItem } from "@/lib/storage";
 import type { UserProfile, FoodLibraryItem } from "@/lib/storage";
 
+const MEAL_TIMES = ["Noon", "3 PM", "6 PM", "8 PM", "Other"];
+const EMPTY_FORM = { meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" };
+
 function MacroRing({ value, max, color, label, unit = "g" }: {
   value: number; max: number; color: string; label: string; unit?: string;
 }) {
@@ -55,12 +58,24 @@ function StatCard({ icon: Icon, label, value, sub, color, href }: {
 
 export default function Dashboard() {
   const today = format(new Date(), "yyyy-MM-dd");
+  const { toast } = useToast();
   const [summary, setSummary] = useState<any>(null);
   const [latestWeight, setLatestWeight] = useState<number | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  // Quick-log food state
+  const [logOpen, setLogOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [library, setLibrary] = useState<FoodLibraryItem[]>([]);
+
+  const loadLibrary = useCallback(async () => {
+    try { setLibrary(await getFoodLibrary()); } catch {}
+  }, []);
+
+  const load = useCallback(async () => {
     try {
       const [s, wh, prof] = await Promise.all([getDailySummary(today), getWeightEntries(7), getProfile()]);
       setSummary(s);
@@ -71,13 +86,46 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [today]);
 
-  useEffect(() => { load(); }, [today]);
+  useEffect(() => { load(); loadLibrary(); }, [load, loadLibrary]);
   useEffect(() => {
     window.addEventListener("focus", load);
     return () => window.removeEventListener("focus", load);
-  }, []);
+  }, [load]);
+
+  const filteredLibrary = search
+    ? library.filter(l => l.name.toLowerCase().includes(search.toLowerCase()))
+    : [];
+
+  const fillFromLibrary = (item: FoodLibraryItem) => {
+    setForm(f => ({ ...f, name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? "") }));
+    setSearch("");
+  };
+
+  const handleQuickLog = async () => {
+    if (!form.name || !form.calories || !form.protein) return;
+    setSaving(true);
+    try {
+      await addFood({ date: today, meal: form.meal, name: form.name, calories: parseInt(form.calories), protein: parseFloat(form.protein), carbs: form.carbs ? parseFloat(form.carbs) : null, fat: form.fat ? parseFloat(form.fat) : null });
+      const alreadyInLibrary = library.some(l => l.name.toLowerCase() === form.name.toLowerCase());
+      if (!alreadyInLibrary) {
+        await addFoodLibraryItem({ name: form.name, calories: parseInt(form.calories), protein: parseFloat(form.protein), carbs: form.carbs ? parseFloat(form.carbs) : null, fat: form.fat ? parseFloat(form.fat) : null, serving_size: null, category: "Other" });
+        await loadLibrary();
+        toast({ title: "Food logged + saved to library ✓" });
+      } else {
+        toast({ title: "Food logged ✓" });
+      }
+      await load();
+      setLogOpen(false);
+      setForm(EMPTY_FORM);
+      setSearch("");
+    } catch (e: any) {
+      toast({ title: "Failed to save", description: e?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Targets — from profile with sensible fallbacks
   const CALORIE_TARGET = profile?.calorie_target ?? 2200;
@@ -102,15 +150,9 @@ export default function Dashboard() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Log Food</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            {/* Library search */}
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search your food library..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-8"
-              />
+              <Input placeholder="Search your food library..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8" />
               {search && filteredLibrary.length > 0 && (
                 <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                   {filteredLibrary.map(item => (
@@ -127,7 +169,6 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Meal Time</Label>
@@ -141,16 +182,13 @@ export default function Dashboard() {
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Chicken Breast" />
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Calories</Label><Input type="number" value={form.calories} onChange={e => setForm(f => ({ ...f, calories: e.target.value }))} placeholder="0" /></div>
               <div><Label>Protein (g)</Label><Input type="number" value={form.protein} onChange={e => setForm(f => ({ ...f, protein: e.target.value }))} placeholder="0" /></div>
               <div><Label>Carbs (g)</Label><Input type="number" value={form.carbs} onChange={e => setForm(f => ({ ...f, carbs: e.target.value }))} placeholder="0" /></div>
               <div><Label>Fat (g)</Label><Input type="number" value={form.fat} onChange={e => setForm(f => ({ ...f, fat: e.target.value }))} placeholder="0" /></div>
             </div>
-
             <p className="text-xs text-muted-foreground">New foods are automatically added to your library.</p>
-
             <Button onClick={handleQuickLog} disabled={saving || !form.name || !form.calories || !form.protein} className="w-full">
               {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Log Food"}
             </Button>
