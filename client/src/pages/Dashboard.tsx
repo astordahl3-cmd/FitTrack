@@ -91,9 +91,76 @@ export default function Dashboard() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-xl font-bold">{format(new Date(), "EEEE, MMMM d")}</h1>
-        <p className="text-sm text-muted-foreground">Here's your day so far</p>
+
+      {/* Quick-add food dialog */}
+      <Dialog open={logOpen} onOpenChange={v => { setLogOpen(v); if (!v) { setForm(EMPTY_FORM); setSearch(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Log Food</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            {/* Library search */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search your food library..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-8"
+              />
+              {search && filteredLibrary.length > 0 && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {filteredLibrary.map(item => (
+                    <button key={item.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm flex items-center justify-between" onClick={() => fillFromLibrary(item)}>
+                      <span>{item.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2 shrink-0">{item.calories} kcal · {item.protein}g prot</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {search && filteredLibrary.length === 0 && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-sm px-3 py-2 text-xs text-muted-foreground">
+                  No matches — fill in below and it will be saved to your library
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Meal Time</Label>
+                <Select value={form.meal} onValueChange={v => setForm(f => ({ ...f, meal: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{MEAL_TIMES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Food Name</Label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Chicken Breast" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Calories</Label><Input type="number" value={form.calories} onChange={e => setForm(f => ({ ...f, calories: e.target.value }))} placeholder="0" /></div>
+              <div><Label>Protein (g)</Label><Input type="number" value={form.protein} onChange={e => setForm(f => ({ ...f, protein: e.target.value }))} placeholder="0" /></div>
+              <div><Label>Carbs (g)</Label><Input type="number" value={form.carbs} onChange={e => setForm(f => ({ ...f, carbs: e.target.value }))} placeholder="0" /></div>
+              <div><Label>Fat (g)</Label><Input type="number" value={form.fat} onChange={e => setForm(f => ({ ...f, fat: e.target.value }))} placeholder="0" /></div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">New foods are automatically added to your library.</p>
+
+            <Button onClick={handleQuickLog} disabled={saving || !form.name || !form.calories || !form.protein} className="w-full">
+              {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Log Food"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">{format(new Date(), "EEEE, MMMM d")}</h1>
+          <p className="text-sm text-muted-foreground">Here's your day so far</p>
+        </div>
+        <Button size="sm" onClick={() => setLogOpen(true)}>
+          <Plus className="h-4 w-4 mr-1.5" /> Log Food
+        </Button>
       </div>
 
       {/* Goal progress */}
@@ -173,9 +240,11 @@ export default function Dashboard() {
 
       {/* Quick add */}
       <div className="grid grid-cols-3 gap-3 pb-4">
-        {[{ href: "/food", icon: Utensils, label: "Log Food" }, { href: "/workout", icon: Dumbbell, label: "Log Workout" }, { href: "/weight", icon: Scale, label: "Log Weight" }].map(({ href, icon: Icon, label }) => (
-          <Link key={href} href={href}><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><Icon className="h-4 w-4" /><span className="text-xs">{label}</span></Button></a></Link>
-        ))}
+        <Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5" onClick={() => setLogOpen(true)}>
+          <Utensils className="h-4 w-4" /><span className="text-xs">Log Food</span>
+        </Button>
+        <Link href="/workout"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><Dumbbell className="h-4 w-4" /><span className="text-xs">Log Workout</span></Button></a></Link>
+        <Link href="/weight"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><Scale className="h-4 w-4" /><span className="text-xs">Log Weight</span></Button></a></Link>
       </div>
     </div>
   );
