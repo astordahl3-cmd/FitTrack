@@ -476,34 +476,86 @@ export default function FoodLog() {
                       className="w-full text-yellow-800 dark:text-yellow-300 border-yellow-400 dark:border-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 text-xs h-8"
                       onClick={() => {
                         const r = lastScanRaw;
-                        const relevantFields = Object.entries(r.rawNutriments)
-                          .filter(([k]) => /energy|kcal|kj|protein|carb|fat/i.test(k))
-                          .map(([k, v]) => `  ${k}: ${v}`)
-                          .join('\n');
+                        const n = r.rawNutriments;
+                        // Build the raw API fields JSON block matching the template schema
+                        const rawJson = JSON.stringify({
+                          'energy-kcal_serving': n['energy-kcal_serving'] ?? null,
+                          'energy-kcal_100g':    n['energy-kcal_100g']    ?? null,
+                          'energy_serving':      n['energy_serving']      ?? null,
+                          'energy_100g':         n['energy_100g']         ?? null,
+                          'proteins_serving':    n['proteins_serving']    ?? null,
+                          'carbohydrates_serving': n['carbohydrates_serving'] ?? null,
+                          'fat_serving':         n['fat_serving']         ?? null,
+                          'serving_size':        n['serving_size']        ?? '',
+                        }, null, 2);
+                        // Detect whether the 2000 kcal sanity cap fired
+                        const rawKcal = parseFloat(String(n['energy-kcal_serving'] ?? n['energy-kcal_100g'] ?? 0));
+                        const capFired = rawKcal > 2000;
                         const body = [
-                          `## Product`,
-                          `- **Name:** ${r.productName}`,
-                          `- **Barcode:** \`${r.barcode}\``,
-                          `- **OFF page:** https://world.openfoodfacts.org/product/${r.barcode}`,
+                          `## Product Information`,
                           ``,
-                          `## What FitTrack Parsed`,
                           `| Field | Value |`,
-                          `|---|---|`,
+                          `|-------|-------|`,
+                          `| **Product Name** | ${r.productName} |`,
+                          `| **Barcode** | ${r.barcode} |`,
+                          `| **Open Food Facts Link** | https://world.openfoodfacts.org/product/${r.barcode} |`,
+                          ``,
+                          `---`,
+                          ``,
+                          `## Parsed Macro Values (what FitTrack displayed)`,
+                          ``,
+                          `| Nutrient | Value |`,
+                          `|----------|-------|`,
                           `| Calories | ${r.parsedKcal} kcal |`,
                           `| Protein | ${r.parsedProtein}g |`,
                           `| Carbs | ${r.parsedCarbs}g |`,
                           `| Fat | ${r.parsedFat}g |`,
                           ``,
-                          `## Raw OFF Nutriment Fields`,
-                          `\`\`\``,
-                          relevantFields,
-                          `\`\`\``,
+                          `---`,
                           ``,
                           `## What's Wrong`,
-                          `<!-- Describe what looks incorrect e.g. "Calories show 0" or "Protein is 10x too high" -->`,
+                          ``,
+                          `<!-- Describe the problem clearly. Examples:`,
+                          `  - Calories are unrealistically high (e.g. 16,500 kcal for a single serving)`,
+                          `  - Macros don't add up to reported calories`,
+                          `  - All zeroes despite product clearly having nutrition info`,
+                          `-->`,
+                          ``,
+                          `---`,
+                          ``,
+                          `## Raw API Fields (from Open Food Facts response)`,
+                          ``,
+                          `\`\`\`json`,
+                          rawJson,
+                          `\`\`\``,
+                          ``,
+                          `---`,
+                          ``,
+                          `## Sanity Check Triggered?`,
+                          ``,
+                          capFired
+                            ? `- [x] Yes — the 2,000 kcal safety cap was applied (raw value was ${rawKcal} kcal)`
+                            : `- [ ] Yes — the 2,000 kcal safety cap was applied (raw value exceeded limit)`,
+                          capFired
+                            ? `- [ ] No — data passed through as-is`
+                            : `- [x] No — data passed through as-is`,
+                          ``,
+                          `---`,
+                          ``,
+                          `## Expected Values`,
+                          ``,
+                          `<!-- Check product packaging or USDA FoodData Central for correct values -->`,
+                          ``,
+                          `| Nutrient | Expected Value | Source |`,
+                          `|----------|---------------|--------|`,
+                          `| Calories | | |`,
+                          `| Protein | | |`,
+                          `| Carbs | | |`,
+                          `| Fat | | |`,
                         ].join('\n');
-                        const url = `https://github.com/astordahl3-cmd/FitTrack/issues/3` +
-                          `?title=${encodeURIComponent(`[BAD DATA] ${r.productName} (${r.barcode})`)}` +
+                        const url = `https://github.com/astordahl3-cmd/FitTrack/issues/new` +
+                          `?template=bad_data_report.md` +
+                          `&title=${encodeURIComponent(`[BAD DATA] ${r.productName} (${r.barcode})`)}` +
                           `&body=${encodeURIComponent(body)}`;
                         window.open(url, '_blank', 'noopener,noreferrer');
                       }}
