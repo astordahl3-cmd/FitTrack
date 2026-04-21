@@ -19,19 +19,11 @@ export default function Auth() {
   const handleLogin = async () => {
     if (!email || !password) return;
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
-      setLoading(false);
-    } else if (data.session) {
-      // Explicitly set session — Safari sometimes misses onAuthStateChange
-      await supabase.auth.setSession(data.session);
-      // Force a page reload to ensure App re-reads the session cleanly
-      window.location.reload();
-    } else {
-      toast({ title: "Check your email", description: "Please confirm your email address before signing in.", variant: "destructive" });
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   const handleSignup = async () => {
