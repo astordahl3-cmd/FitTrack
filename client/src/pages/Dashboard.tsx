@@ -1,11 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Scale, Utensils, Dumbbell, TrendingDown, Flame, Beef } from "lucide-react";
+import { Scale, Utensils, Dumbbell, TrendingDown, Flame, Beef, Plus, Search, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { getDailySummary, getWeightEntries, getProfile } from "@/lib/storage";
-import type { UserProfile } from "@/lib/storage";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { getDailySummary, getWeightEntries, getProfile, addFood, getFoodLibrary, addFoodLibraryItem } from "@/lib/storage";
+import type { UserProfile, FoodLibraryItem } from "@/lib/storage";
 
 function MacroRing({ value, max, color, label, unit = "g" }: {
   value: number; max: number; color: string; label: string; unit?: string;
