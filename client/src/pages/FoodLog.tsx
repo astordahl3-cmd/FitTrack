@@ -98,54 +98,80 @@ export default function FoodLog() {
     setSearch("");
   };
 
+  const [logSaving, setLogSaving] = useState(false);
+
   const handleLogSubmit = async () => {
     if (!form.name || !form.calories || !form.protein) return;
-    await addFood({
-      date, meal: form.meal, name: form.name,
-      calories: parseInt(form.calories),
-      protein: parseFloat(form.protein),
-      carbs: form.carbs ? parseFloat(form.carbs) : null,
-      fat: form.fat ? parseFloat(form.fat) : null,
-    });
-    await loadEntries();
-    setLogOpen(false);
-    setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
-    setBarcodeError(null);
-    toast({ title: "Food logged ✓" });
+    setLogSaving(true);
+    try {
+      await addFood({
+        date, meal: form.meal, name: form.name,
+        calories: parseInt(form.calories),
+        protein: parseFloat(form.protein),
+        carbs: form.carbs ? parseFloat(form.carbs) : null,
+        fat: form.fat ? parseFloat(form.fat) : null,
+      });
+      await loadEntries();
+      setLogOpen(false);
+      setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
+      setBarcodeError(null);
+      toast({ title: "Food logged ✓" });
+    } catch (e: any) {
+      toast({ title: "Failed to save", description: e?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setLogSaving(false);
+    }
   };
 
   const handleDeleteFood = async (id: string) => {
-    await deleteFood(id);
-    await loadEntries();
+    try {
+      await deleteFood(id);
+      await loadEntries();
+    } catch (e: any) {
+      toast({ title: "Failed to delete", description: e?.message ?? "Unknown error", variant: "destructive" });
+    }
   };
+
+  const [libSaving, setLibSaving] = useState(false);
 
   const handleLibSubmit = async () => {
     if (!libForm.name || !libForm.calories || !libForm.protein) return;
-    const payload = {
-      name: libForm.name,
-      calories: parseInt(libForm.calories),
-      protein: parseFloat(libForm.protein),
-      carbs: libForm.carbs ? parseFloat(libForm.carbs) : null,
-      fat: libForm.fat ? parseFloat(libForm.fat) : null,
-      serving_size: libForm.servingSize || null,
-      category: libForm.category || "Other",
-    };
-    if (editItem) {
-      await updateFoodLibraryItem(editItem.id, payload);
-      toast({ title: "Library item updated ✓" });
-    } else {
-      await addFoodLibraryItem(payload);
-      toast({ title: "Added to library ✓" });
+    setLibSaving(true);
+    try {
+      const payload = {
+        name: libForm.name,
+        calories: parseInt(libForm.calories),
+        protein: parseFloat(libForm.protein),
+        carbs: libForm.carbs ? parseFloat(libForm.carbs) : null,
+        fat: libForm.fat ? parseFloat(libForm.fat) : null,
+        serving_size: libForm.servingSize || null,
+        category: libForm.category || "Other",
+      };
+      if (editItem) {
+        await updateFoodLibraryItem(editItem.id, payload);
+        toast({ title: "Library item updated ✓" });
+      } else {
+        await addFoodLibraryItem(payload);
+        toast({ title: "Added to library ✓" });
+      }
+      await loadLibrary();
+      setLibForm(EMPTY_LIB_FORM);
+      setEditItem(null);
+    } catch (e: any) {
+      toast({ title: "Failed to save", description: e?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setLibSaving(false);
     }
-    await loadLibrary();
-    setLibForm(EMPTY_LIB_FORM);
-    setEditItem(null);
   };
 
   const handleDeleteLib = async (id: string) => {
-    await deleteFoodLibraryItem(id);
-    await loadLibrary();
-    toast({ title: "Removed from library" });
+    try {
+      await deleteFoodLibraryItem(id);
+      await loadLibrary();
+      toast({ title: "Removed from library" });
+    } catch (e: any) {
+      toast({ title: "Failed to delete", description: e?.message ?? "Unknown error", variant: "destructive" });
+    }
   };
 
   const startEdit = (item: FoodLibraryItem) => {
@@ -300,8 +326,8 @@ export default function FoodLog() {
                     <div><Label>Carbs (g)</Label><Input type="number" value={libForm.carbs} onChange={e => setLibForm(f => ({ ...f, carbs: e.target.value }))} placeholder="0" /></div>
                     <div><Label>Fat (g)</Label><Input type="number" value={libForm.fat} onChange={e => setLibForm(f => ({ ...f, fat: e.target.value }))} placeholder="0" /></div>
                   </div>
-                  <Button onClick={handleLibSubmit} disabled={!libForm.name || !libForm.calories || !libForm.protein} className="w-full">
-                    {editItem ? "Save Changes" : "Add to Library"}
+                  <Button onClick={handleLibSubmit} disabled={!libForm.name || !libForm.calories || !libForm.protein || libSaving} className="w-full">
+                    {libSaving ? "Saving..." : editItem ? "Save Changes" : "Add to Library"}
                   </Button>
                   <p className="text-xs text-muted-foreground text-center">* Required fields</p>
                 </TabsContent>
@@ -380,7 +406,9 @@ export default function FoodLog() {
                   <div><Label>Fat (g)</Label><Input type="number" value={form.fat} onChange={e => setForm(f => ({ ...f, fat: e.target.value }))} placeholder="0" /></div>
                 </div>
 
-                <Button onClick={handleLogSubmit} className="w-full">Log Food</Button>
+                <Button onClick={handleLogSubmit} disabled={logSaving} className="w-full">
+                  {logSaving ? "Saving..." : "Log Food"}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>

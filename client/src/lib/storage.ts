@@ -62,12 +62,14 @@ export async function getWeightEntries(limit = 90): Promise<WeightEntry[]> {
 }
 
 export async function addWeight(data: { date: string; weight: number; note?: string | null }): Promise<WeightEntry> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
     .from("weight_entries")
     .insert(data)
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return row;
 }
 
@@ -89,12 +91,14 @@ export async function getFoodByDate(date: string): Promise<FoodEntry[]> {
 }
 
 export async function addFood(data: Omit<FoodEntry, "id" | "created_at">): Promise<FoodEntry> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
     .from("food_entries")
     .insert(data)
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return row;
 }
 
@@ -126,12 +130,14 @@ export async function getRecentWorkouts(limit = 30): Promise<WorkoutSession[]> {
 }
 
 export async function addWorkout(data: Omit<WorkoutSession, "id" | "created_at">): Promise<WorkoutSession> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
     .from("workout_sessions")
     .insert(data)
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return row;
 }
 
@@ -152,12 +158,14 @@ export async function getFoodLibrary(): Promise<FoodLibraryItem[]> {
 }
 
 export async function addFoodLibraryItem(data: Omit<FoodLibraryItem, "id">): Promise<FoodLibraryItem> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
     .from("food_library")
     .insert({ ...data, serving_size: data.serving_size ?? null })
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return row;
 }
 

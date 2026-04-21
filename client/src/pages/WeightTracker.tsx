@@ -76,8 +76,12 @@ export default function WeightTracker() {
   };
 
   const handleDelete = async (id: string) => {
-    await deleteWeight(id);
-    await load();
+    try {
+      await deleteWeight(id);
+      await load();
+    } catch (e: any) {
+      toast({ title: "Failed to delete", description: e?.message ?? "Unknown error", variant: "destructive" });
+    }
   };
 
   const GOAL_START = profile?.start_weight ?? 255;

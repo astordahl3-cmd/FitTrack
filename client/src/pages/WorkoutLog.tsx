@@ -98,14 +98,20 @@ export default function WorkoutLog() {
       await load();
       setOpen(false);
       toast({ title: "Workout logged ✓" });
+    } catch (e: any) {
+      toast({ title: "Failed to save workout", description: e?.message ?? "Unknown error", variant: "destructive" });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    await deleteWorkout(id);
-    await load();
+    try {
+      await deleteWorkout(id);
+      await load();
+    } catch (e: any) {
+      toast({ title: "Failed to delete", description: e?.message ?? "Unknown error", variant: "destructive" });
+    }
   };
 
   const grouped = workouts.reduce((acc, w) => {
