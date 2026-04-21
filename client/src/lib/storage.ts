@@ -189,6 +189,10 @@ export interface UserProfile {
   protein_target?: number | null;
   carb_target?: number | null;
   fat_target?: number | null;
+  sex?: string | null;          // 'male' | 'female'
+  height_in?: number | null;   // height in inches
+  age?: number | null;
+  activity_level?: string | null; // 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active'
 }
 
 export async function getProfile(): Promise<UserProfile | null> {
