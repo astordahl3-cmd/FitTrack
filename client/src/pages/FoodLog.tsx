@@ -333,7 +333,8 @@ export default function FoodLog() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err?.error ?? 'Analysis failed');
+        // Surface the specific OpenAI error so it's actionable
+        throw new Error(err?.error ?? err?.message ?? 'Analysis failed');
       }
 
       const result = await res.json();
