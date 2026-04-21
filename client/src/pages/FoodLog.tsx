@@ -191,33 +191,66 @@ export default function FoodLog() {
     setBarcodeError(null);
     setLogOpen(true);
     try {
+      // v0 API has broader nutriment field coverage than v2
       const res = await fetch(
-        `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}?fields=product_name,serving_size,nutriments`,
-        { headers: { "User-Agent": "FitTrack/1.0" } }
+        `https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`,
+        {
+          headers: { "User-Agent": "FitTrack/1.0 (github.com/astordahl3-cmd/FitTrack)" },
+          signal: AbortSignal.timeout(8000),
+        }
       );
       const json = await res.json();
+
       if (json.status !== 1 || !json.product) {
-        setBarcodeError("Product not found — fill in manually below.");
+        setBarcodeError("Product not found in database — fill in manually below.");
         setBarcodeLoading(false);
         return;
       }
+
       const p = json.product;
       const n = p.nutriments ?? {};
-      // Prefer per-serving values, fall back to per-100g
-      const num = (serving: string, per100: string) => {
-        const v = n[serving] ?? n[per100] ?? 0;
-        return Math.round((parseFloat(String(v)) || 0) * 10) / 10;
+
+      // Helper: pick first truthy numeric value from a list of field names
+      const pick = (...keys: string[]): number => {
+        for (const k of keys) {
+          const v = parseFloat(String(n[k] ?? ""));
+          if (!isNaN(v) && v > 0) return v;
+        }
+        return 0;
       };
+
+      // Calories: prefer kcal per serving → kcal per 100g → convert kJ
+      // Sanity cap: >2000 kcal/serving almost always means bad OFF data — skip to kJ fallback
+      const kcal = (() => {
+        const fromKcal = pick(
+          "energy-kcal_serving", "energy-kcal_100g", "energy-kcal"
+        );
+        if (fromKcal > 0 && fromKcal <= 2000) return fromKcal;
+        // Fall back: derive from kJ (÷ 4.184), also cap at 2000
+        const kjServing = pick("energy-kj_serving", "energy_serving");
+        if (kjServing > 0) return Math.min(Math.round(kjServing / 4.184), 2000);
+        const kj100g = pick("energy-kj_100g", "energy_100g");
+        return kj100g > 0 ? Math.min(Math.round(kj100g / 4.184), 2000) : 0;
+      })();
+
+      const protein = pick("proteins_serving", "proteins_100g", "proteins");
+      const carbs   = pick("carbohydrates_serving", "carbohydrates_100g", "carbohydrates");
+      const fat     = pick("fat_serving", "fat_100g", "fat");
+
       setForm(f => ({
         ...f,
-        name: p.product_name ?? "Unknown Product",
-        calories: String(Math.round(num("energy-kcal_serving", "energy-kcal_100g"))),
-        protein: String(num("proteins_serving", "proteins_100g")),
-        carbs: String(num("carbohydrates_serving", "carbohydrates_100g")),
-        fat: String(num("fat_serving", "fat_100g")),
+        name: p.product_name || p.abbreviated_product_name || "Unknown Product",
+        calories: String(Math.round(kcal)),
+        protein:  String(Math.round(protein * 10) / 10),
+        carbs:    String(Math.round(carbs * 10) / 10),
+        fat:      String(Math.round(fat * 10) / 10),
       }));
-    } catch {
-      setBarcodeError("Could not reach food database — check your connection.");
+    } catch (e: any) {
+      if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+        setBarcodeError("Request timed out — check your connection and try again.");
+      } else {
+        setBarcodeError("Could not reach food database — check your connection.");
+      }
     }
     setBarcodeLoading(false);
   };
