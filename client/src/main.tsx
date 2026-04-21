@@ -6,10 +6,16 @@ if (!window.location.hash) {
   window.location.hash = "#/";
 }
 
-// Register service worker for PWA / home screen install
+// Register service worker with correct base path
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  window.addEventListener('load', async () => {
+    try {
+      // Unregister any old SW from wrong scope first
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) await reg.unregister();
+      // Re-register with correct path (includes /FitTrack/ base)
+      await navigator.serviceWorker.register('/FitTrack/sw.js');
+    } catch {}
   });
 }
 
