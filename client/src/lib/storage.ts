@@ -66,7 +66,7 @@ export async function addWeight(data: { date: string; weight: number; note?: str
   if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
     .from("weight_entries")
-    .insert(data)
+    .insert({ ...data, user_id: session.user.id })
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -95,7 +95,7 @@ export async function addFood(data: Omit<FoodEntry, "id" | "created_at">): Promi
   if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
     .from("food_entries")
-    .insert(data)
+    .insert({ ...data, user_id: session.user.id })
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -134,7 +134,7 @@ export async function addWorkout(data: Omit<WorkoutSession, "id" | "created_at">
   if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
     .from("workout_sessions")
-    .insert(data)
+    .insert({ ...data, user_id: session.user.id })
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -162,7 +162,7 @@ export async function addFoodLibraryItem(data: Omit<FoodLibraryItem, "id">): Pro
   if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
     .from("food_library")
-    .insert({ ...data, serving_size: data.serving_size ?? null })
+    .insert({ ...data, serving_size: data.serving_size ?? null, user_id: session.user.id })
     .select()
     .single();
   if (error) throw new Error(error.message);
