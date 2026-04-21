@@ -1,5 +1,8 @@
 # FitTrack
 
+[![Build and Deploy](https://github.com/astordahl3-cmd/FitTrack/actions/workflows/build-and-deploy.yml/badge.svg?branch=source)](https://github.com/astordahl3-cmd/FitTrack/actions/workflows/build-and-deploy.yml)
+[![GitHub Pages](https://github.com/astordahl3-cmd/FitTrack/actions/workflows/pages.yml/badge.svg?branch=main)](https://github.com/astordahl3-cmd/FitTrack/actions/workflows/pages.yml)
+
 A personal fitness tracking Progressive Web App (PWA) built with React, TypeScript, Vite, Tailwind CSS, shadcn/ui, and Supabase.
 
 **Live app:** https://astordahl3-cmd.github.io/FitTrack/
