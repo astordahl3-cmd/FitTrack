@@ -1,0 +1,99 @@
+name: Bad Data Triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    # Only run for issues that match the bad-data report pattern
+    if: startsWith(github.event.issue.title, '[BAD DATA]')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Apply bad-data label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['bad-data']
+            });
+
+      - name: Extract barcode and post correction comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body ?? '';
+            const title = context.payload.issue.title ?? '';
+
+            // Try to extract barcode from the issue body table row first,
+            // then fall back to the title pattern: [BAD DATA] Product Name (barcode)
+            let barcode = null;
+
+            // Body: look for "| **Barcode** | 012345678901 |"
+            const bodyMatch = body.match(/\*\*Barcode\*\*\s*\|\s*([0-9]{6,14})/);
+            if (bodyMatch) {
+              barcode = bodyMatch[1].trim();
+            }
+
+            // Title fallback: [BAD DATA] Some Product (012345678901)
+            if (!barcode) {
+              const titleMatch = title.match(/\(([0-9]{6,14})\)\s*$/);
+              if (titleMatch) barcode = titleMatch[1].trim();
+            }
+
+            // Build comment
+            let comment;
+            if (barcode) {
+              const offProductUrl  = `https://world.openfoodfacts.org/product/${barcode}`;
+              const offEditUrl     = `https://world.openfoodfacts.org/cgi/product.pl?type=edit&code=${barcode}`;
+              const offHistoryUrl  = `https://world.openfoodfacts.org/product/${barcode}/revisions`;
+
+              comment = [
+                '## 🚩 Bad Data Report Received',
+                '',
+                `Thanks for flagging this product. Here are the Open Food Facts links for barcode **\`${barcode}\`**:`,
+                '',
+                `| Action | Link |`,
+                `|--------|------|`,
+                `| 📄 View product page | [openfoodfacts.org/product/${barcode}](${offProductUrl}) |`,
+                `| ✏️ Submit a correction | [Edit on Open Food Facts](${offEditUrl}) |`,
+                `| 🕒 View edit history | [Revision history](${offHistoryUrl}) |`,
+                '',
+                '### How to fix bad data',
+                '1. Open the **Edit on Open Food Facts** link above',
+                '2. Sign in (free account) or edit as a guest',
+                '3. Scroll to **Nutrition facts** and enter the correct values from the product label',
+                '4. Save — changes go live immediately in the OFF API',
+                '',
+                '> **Note:** FitTrack will automatically pick up corrected values the next time this barcode is scanned, no app update required.',
+                '',
+                '---',
+                '_This comment was posted automatically by the FitTrack bad-data triage workflow._',
+              ].join('\n');
+            } else {
+              // No barcode found — post a generic prompt
+              comment = [
+                '## 🚩 Bad Data Report Received',
+                '',
+                'Thanks for the report! No barcode was detected in the issue body.',
+                '',
+                'Could you add the product barcode so we can link to the Open Food Facts correction page?',
+                'You can find it on the product packaging or look it up at [world.openfoodfacts.org](https://world.openfoodfacts.org).',
+                '',
+                '---',
+                '_This comment was posted automatically by the FitTrack bad-data triage workflow._',
+              ].join('\n');
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
