@@ -1,0 +1,405 @@
+import { useState, useEffect, useCallback } from "react";
+import { format } from "date-fns";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Search, BookOpen, Pencil, ScanBarcode, Loader2 } from "lucide-react";
+import BarcodeScanner from "@/components/BarcodeScanner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import {
+  getFoodByDate, addFood, deleteFood,
+  getFoodLibrary, addFoodLibraryItem, updateFoodLibraryItem, deleteFoodLibraryItem,
+} from "@/lib/storage";
+import type { FoodEntry, FoodLibraryItem } from "@/lib/storage";
+
+const MEAL_TIMES = ["Noon", "3 PM", "6 PM", "8 PM", "Other"];
+const CALORIE_TARGET = 2200;
+const PROTEIN_TARGET = 210;
+const EMPTY_LIB_FORM = { name: "", calories: "", protein: "", carbs: "", fat: "", servingSize: "" };
+
+export default function FoodLog() {
+  const { toast } = useToast();
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [entries, setEntries] = useState<FoodEntry[]>([]);
+  const [library, setLibrary] = useState<FoodLibraryItem[]>([]);
+
+  const [logOpen, setLogOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [libSearch, setLibSearch] = useState("");
+  const [editItem, setEditItem] = useState<FoodLibraryItem | null>(null);
+  const [libForm, setLibForm] = useState(EMPTY_LIB_FORM);
+  const [form, setForm] = useState({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
+
+  const loadEntries = useCallback(() => setEntries(getFoodByDate(date)), [date]);
+  const loadLibrary = useCallback(() => setLibrary(getFoodLibrary()), []);
+
+  useEffect(() => { loadEntries(); }, [loadEntries]);
+  useEffect(() => { loadLibrary(); }, [loadLibrary]);
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const totals = entries.reduce(
+    (acc, e) => ({ cal: acc.cal + e.calories, prot: acc.prot + e.protein }),
+    { cal: 0, prot: 0 }
+  );
+
+  const filteredLibrary = library.filter(l => l.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredLibAll = library.filter(l => l.name.toLowerCase().includes(libSearch.toLowerCase()));
+
+  const mealGroups = MEAL_TIMES.reduce((acc, meal) => {
+    const items = entries.filter(e => e.meal === meal);
+    if (items.length) acc[meal] = items;
+    return acc;
+  }, {} as Record<string, FoodEntry[]>);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  const fillFromLibrary = (item: FoodLibraryItem) => {
+    setForm(f => ({ ...f, name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? "") }));
+    setSearch("");
+  };
+
+  const handleLogSubmit = () => {
+    if (!form.name || !form.calories || !form.protein) return;
+    addFood({
+      date, meal: form.meal, name: form.name,
+      calories: parseInt(form.calories),
+      protein: parseFloat(form.protein),
+      carbs: form.carbs ? parseFloat(form.carbs) : null,
+      fat: form.fat ? parseFloat(form.fat) : null,
+    });
+    loadEntries();
+    setLogOpen(false);
+    setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
+    setBarcodeError(null);
+    toast({ title: "Food logged ✓" });
+  };
+
+  const handleDeleteFood = (id: number) => { deleteFood(id); loadEntries(); };
+
+  const handleLibSubmit = () => {
+    if (!libForm.name || !libForm.calories || !libForm.protein) return;
+    const payload = {
+      name: libForm.name,
+      calories: parseInt(libForm.calories),
+      protein: parseFloat(libForm.protein),
+      carbs: libForm.carbs ? parseFloat(libForm.carbs) : null,
+      fat: libForm.fat ? parseFloat(libForm.fat) : null,
+      servingSize: libForm.servingSize || null,
+    };
+    if (editItem) {
+      updateFoodLibraryItem(editItem.id, payload);
+      toast({ title: "Library item updated ✓" });
+    } else {
+      addFoodLibraryItem(payload);
+      toast({ title: "Added to library ✓" });
+    }
+    loadLibrary();
+    setLibForm(EMPTY_LIB_FORM);
+    setEditItem(null);
+  };
+
+  const handleDeleteLib = (id: number) => { deleteFoodLibraryItem(id); loadLibrary(); toast({ title: "Removed from library" }); };
+
+  const startEdit = (item: FoodLibraryItem) => {
+    setEditItem(item);
+    setLibForm({ name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? ""), servingSize: item.servingSize ?? "" });
+  };
+
+  const changeDate = (dir: number) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + dir);
+    setDate(format(d, "yyyy-MM-dd"));
+  };
+
+  const handleBarcodeDetected = async (barcode: string) => {
+    setScannerOpen(false);
+    setBarcodeLoading(true);
+    setBarcodeError(null);
+    setLogOpen(true);
+    try {
+      const res = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}?fields=product_name,serving_size,nutriments`,
+        { headers: { "User-Agent": "FitTrack/1.0" } }
+      );
+      const json = await res.json();
+      if (json.status !== 1 || !json.product) {
+        setBarcodeError("Product not found — fill in manually below.");
+        setBarcodeLoading(false);
+        return;
+      }
+      const p = json.product;
+      const n = p.nutriments ?? {};
+      // Prefer per-serving values, fall back to per-100g
+      const num = (serving: string, per100: string) => {
+        const v = n[serving] ?? n[per100] ?? 0;
+        return Math.round((parseFloat(String(v)) || 0) * 10) / 10;
+      };
+      setForm(f => ({
+        ...f,
+        name: p.product_name ?? "Unknown Product",
+        calories: String(Math.round(num("energy-kcal_serving", "energy-kcal_100g"))),
+        protein: String(num("proteins_serving", "proteins_100g")),
+        carbs: String(num("carbohydrates_serving", "carbohydrates_100g")),
+        fat: String(num("fat_serving", "fat_100g")),
+      }));
+    } catch {
+      setBarcodeError("Could not reach food database — check your connection.");
+    }
+    setBarcodeLoading(false);
+  };
+
+  return (
+    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5">
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">Food Log</h1>
+        <div className="flex gap-2">
+
+          {/* Food Library */}
+          <Dialog open={libraryOpen} onOpenChange={v => { setLibraryOpen(v); if (!v) { setEditItem(null); setLibForm(EMPTY_LIB_FORM); } }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm"><BookOpen className="h-4 w-4 mr-1.5" /> Library</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+              <DialogHeader><DialogTitle>Food Library</DialogTitle></DialogHeader>
+              <Tabs defaultValue="browse" className="flex-1 flex flex-col overflow-hidden">
+                <TabsList className="w-full">
+                  <TabsTrigger value="browse" className="flex-1">Browse & Edit</TabsTrigger>
+                  <TabsTrigger value="add" className="flex-1">{editItem ? "Edit Item" : "Add New"}</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="browse" className="flex-1 overflow-hidden flex flex-col mt-3 space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search library..." value={libSearch} onChange={e => setLibSearch(e.target.value)} className="pl-8" />
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+                    {filteredLibAll.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">No items found</p>
+                    ) : filteredLibAll.map(item => (
+                      <div key={item.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-border hover:border-primary/40 hover:bg-muted/50 group transition-all">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{item.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.calories} kcal · {item.protein}g protein
+                            {item.carbs != null ? ` · ${item.carbs}g carbs` : ""}
+                            {item.fat != null ? ` · ${item.fat}g fat` : ""}
+                            {item.servingSize ? ` · ${item.servingSize}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex gap-1 ml-2 shrink-0">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => startEdit(item)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteLib(item.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">{library.length} items in library</p>
+                </TabsContent>
+
+                <TabsContent value="add" className="mt-3 space-y-3">
+                  {editItem && (
+                    <div className="flex items-center justify-between rounded-lg bg-primary/10 px-3 py-2">
+                      <p className="text-sm font-medium text-primary">Editing: {editItem.name}</p>
+                      <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => { setEditItem(null); setLibForm(EMPTY_LIB_FORM); }}>Clear</Button>
+                    </div>
+                  )}
+                  <div>
+                    <Label>Food Name *</Label>
+                    <Input value={libForm.name} onChange={e => setLibForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Chicken Breast (8 oz)" />
+                  </div>
+                  <div>
+                    <Label>Serving Size</Label>
+                    <Input value={libForm.servingSize} onChange={e => setLibForm(f => ({ ...f, servingSize: e.target.value }))} placeholder="e.g. 8 oz, 1 cup, 2 scoops" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Calories *</Label><Input type="number" value={libForm.calories} onChange={e => setLibForm(f => ({ ...f, calories: e.target.value }))} placeholder="0" /></div>
+                    <div><Label>Protein (g) *</Label><Input type="number" value={libForm.protein} onChange={e => setLibForm(f => ({ ...f, protein: e.target.value }))} placeholder="0" /></div>
+                    <div><Label>Carbs (g)</Label><Input type="number" value={libForm.carbs} onChange={e => setLibForm(f => ({ ...f, carbs: e.target.value }))} placeholder="0" /></div>
+                    <div><Label>Fat (g)</Label><Input type="number" value={libForm.fat} onChange={e => setLibForm(f => ({ ...f, fat: e.target.value }))} placeholder="0" /></div>
+                  </div>
+                  <Button onClick={handleLibSubmit} disabled={!libForm.name || !libForm.calories || !libForm.protein} className="w-full">
+                    {editItem ? "Save Changes" : "Add to Library"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">* Required fields</p>
+                </TabsContent>
+              </Tabs>
+            </DialogContent>
+          </Dialog>
+
+          {/* Barcode Scanner */}
+          <Dialog open={scannerOpen} onOpenChange={v => { setScannerOpen(v); if (!v) setBarcodeError(null); }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm"><ScanBarcode className="h-4 w-4 mr-1.5" /> Scan</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-sm">
+              <DialogHeader><DialogTitle>Scan Barcode</DialogTitle></DialogHeader>
+              <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setScannerOpen(false)} />
+            </DialogContent>
+          </Dialog>
+
+          {/* Add Food */}
+          <Dialog open={logOpen} onOpenChange={v => { setLogOpen(v); if (!v) { setBarcodeError(null); setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" }); } }}>
+            <DialogTrigger asChild>
+              <Button size="sm"><Plus className="h-4 w-4 mr-1.5" /> Add Food</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader><DialogTitle>Log Food</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                {barcodeLoading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-lg bg-muted/50 px-3 py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Looking up barcode...
+                  </div>
+                )}
+                {barcodeError && (
+                  <div className="text-sm text-destructive rounded-lg bg-destructive/10 px-3 py-2">
+                    {barcodeError}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search your food library..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8" />
+                  {search && filteredLibrary.length > 0 && (
+                    <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredLibrary.map(item => (
+                        <button key={item.id} className="w-full text-left px-3 py-2 hover:bg-muted text-sm flex items-center justify-between" onClick={() => fillFromLibrary(item)}>
+                          <span>{item.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2 shrink-0">{item.calories} kcal · {item.protein}g prot</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {search && filteredLibrary.length === 0 && (
+                    <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-sm px-3 py-2 text-xs text-muted-foreground">
+                      No matches — fill in manually below
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Meal Time</Label>
+                    <Select value={form.meal} onValueChange={v => setForm(f => ({ ...f, meal: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{MEAL_TIMES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Food Name</Label>
+                    <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Chicken Breast" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Calories</Label><Input type="number" value={form.calories} onChange={e => setForm(f => ({ ...f, calories: e.target.value }))} placeholder="0" /></div>
+                  <div><Label>Protein (g)</Label><Input type="number" value={form.protein} onChange={e => setForm(f => ({ ...f, protein: e.target.value }))} placeholder="0" /></div>
+                  <div><Label>Carbs (g)</Label><Input type="number" value={form.carbs} onChange={e => setForm(f => ({ ...f, carbs: e.target.value }))} placeholder="0" /></div>
+                  <div><Label>Fat (g)</Label><Input type="number" value={form.fat} onChange={e => setForm(f => ({ ...f, fat: e.target.value }))} placeholder="0" /></div>
+                </div>
+
+                <Button onClick={handleLogSubmit} className="w-full">Log Food</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Date nav */}
+      <div className="flex items-center justify-between bg-card border border-border rounded-lg px-3 py-2">
+        <Button variant="ghost" size="icon" onClick={() => changeDate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
+        <span className="text-sm font-medium">
+          {date === format(new Date(), "yyyy-MM-dd") ? "Today" : format(new Date(date + "T12:00:00"), "EEE, MMM d")}
+        </span>
+        <Button variant="ghost" size="icon" onClick={() => changeDate(1)}><ChevronRight className="h-4 w-4" /></Button>
+      </div>
+
+      {/* Daily totals */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className={totals.cal > CALORIE_TARGET ? "border-red-300 dark:border-red-800" : "border-primary/20"}>
+          <CardContent className="p-3 text-center">
+            <p className="text-2xl font-bold stat-value">{totals.cal}</p>
+            <p className="text-xs text-muted-foreground">/ {CALORIE_TARGET} kcal</p>
+            <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${totals.cal > CALORIE_TARGET ? "bg-red-500" : "bg-blue-500"}`}
+                style={{ width: `${Math.min(totals.cal / CALORIE_TARGET * 100, 100)}%` }} />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={totals.prot >= PROTEIN_TARGET ? "border-primary" : "border-border"}>
+          <CardContent className="p-3 text-center">
+            <p className="text-2xl font-bold stat-value text-primary">{Math.round(totals.prot)}g</p>
+            <p className="text-xs text-muted-foreground">/ {PROTEIN_TARGET}g protein</p>
+            <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full bg-primary transition-all"
+                style={{ width: `${Math.min(totals.prot / PROTEIN_TARGET * 100, 100)}%` }} />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Meal groups */}
+      {Object.keys(mealGroups).length === 0 ? (
+        <Card>
+          <CardContent className="p-8 text-center text-muted-foreground">
+            <div className="text-4xl mb-3 opacity-30">🍽</div>
+            <p className="text-sm font-medium">No meals logged yet</p>
+            <p className="text-xs mt-1">Tap "Add Food" to log your first meal</p>
+          </CardContent>
+        </Card>
+      ) : (
+        MEAL_TIMES.filter(m => mealGroups[m]).map(meal => (
+          <Card key={meal}>
+            <CardHeader className="pb-1 pt-3 px-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">{meal}</CardTitle>
+                <span className="text-xs text-muted-foreground stat-value">
+                  {mealGroups[meal].reduce((a, e) => a + e.calories, 0)} kcal
+                  {" · "}
+                  {mealGroups[meal].reduce((a, e) => a + e.protein, 0).toFixed(0)}g protein
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-3 space-y-2">
+              {mealGroups[meal].map(entry => (
+                <div key={entry.id} className="flex items-center justify-between py-1 group">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{entry.name}</p>
+                    <p className="text-xs text-muted-foreground stat-value">
+                      {entry.protein}g prot
+                      {entry.carbs != null ? ` · ${entry.carbs}g carb` : ""}
+                      {entry.fat != null ? ` · ${entry.fat}g fat` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-3">
+                    <span className="text-sm font-semibold stat-value">{entry.calories}</span>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                      onClick={() => handleDeleteFood(entry.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+}

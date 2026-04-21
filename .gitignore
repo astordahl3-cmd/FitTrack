@@ -1,0 +1,6 @@
+node_modules/
+dist/
+fittrack.db
+*.db-shm
+*.db-wal
+.env
