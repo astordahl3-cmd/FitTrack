@@ -19,7 +19,16 @@ import type { FoodEntry, FoodLibraryItem } from "@/lib/storage";
 const MEAL_TIMES = ["Noon", "3 PM", "6 PM", "8 PM", "Other"];
 const CALORIE_TARGET = 2200;
 const PROTEIN_TARGET = 210;
-const EMPTY_LIB_FORM = { name: "", calories: "", protein: "", carbs: "", fat: "", servingSize: "" };
+const EMPTY_LIB_FORM = { name: "", calories: "", protein: "", carbs: "", fat: "", servingSize: "", category: "" };
+const CATEGORIES = [
+  "All",
+  "🥤 Shakes & Supplements",
+  "🥩 Proteins",
+  "🥚 Eggs & Dairy",
+  "🍎 Fruits",
+  "🥦 Vegetables",
+  "Other",
+];
 
 export default function FoodLog() {
   const { toast } = useToast();
@@ -35,6 +44,7 @@ export default function FoodLog() {
 
   const [search, setSearch] = useState("");
   const [libSearch, setLibSearch] = useState("");
+  const [libCategory, setLibCategory] = useState("All");
   const [editItem, setEditItem] = useState<FoodLibraryItem | null>(null);
   const [libForm, setLibForm] = useState(EMPTY_LIB_FORM);
   const [form, setForm] = useState({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
@@ -59,7 +69,11 @@ export default function FoodLog() {
   );
 
   const filteredLibrary = library.filter(l => l.name.toLowerCase().includes(search.toLowerCase()));
-  const filteredLibAll = library.filter(l => l.name.toLowerCase().includes(libSearch.toLowerCase()));
+  const filteredLibAll = library.filter(l => {
+    const matchesSearch = l.name.toLowerCase().includes(libSearch.toLowerCase());
+    const matchesCategory = libCategory === "All" || (l.category ?? "Other") === libCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   const mealGroups = MEAL_TIMES.reduce((acc, meal) => {
     const items = entries.filter(e => e.meal === meal);
@@ -103,6 +117,7 @@ export default function FoodLog() {
       carbs: libForm.carbs ? parseFloat(libForm.carbs) : null,
       fat: libForm.fat ? parseFloat(libForm.fat) : null,
       serving_size: libForm.servingSize || null,
+      category: libForm.category || "Other",
     };
     if (editItem) {
       await updateFoodLibraryItem(editItem.id, payload);
@@ -124,7 +139,7 @@ export default function FoodLog() {
 
   const startEdit = (item: FoodLibraryItem) => {
     setEditItem(item);
-    setLibForm({ name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? ""), servingSize: item.serving_size ?? "" });
+    setLibForm({ name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? ""), servingSize: item.serving_size ?? "", category: item.category ?? "" });
   };
 
   const changeDate = (dir: number) => {
@@ -196,6 +211,22 @@ export default function FoodLog() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input placeholder="Search library..." value={libSearch} onChange={e => setLibSearch(e.target.value)} className="pl-8" />
                   </div>
+                  {/* Category filter chips */}
+                  <div className="flex gap-1.5 flex-wrap">
+                    {CATEGORIES.map(cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setLibCategory(cat)}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                          libCategory === cat
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex-1 overflow-y-auto space-y-1 pr-1">
                     {filteredLibAll.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-8">No items found</p>
@@ -221,7 +252,7 @@ export default function FoodLog() {
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground text-center">{library.length} items in library</p>
+                  <p className="text-xs text-muted-foreground text-center">{filteredLibAll.length} of {library.length} items</p>
                 </TabsContent>
 
                 <TabsContent value="add" className="mt-3 space-y-3">
@@ -235,9 +266,22 @@ export default function FoodLog() {
                     <Label>Food Name *</Label>
                     <Input value={libForm.name} onChange={e => setLibForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Chicken Breast (8 oz)" />
                   </div>
-                  <div>
-                    <Label>Serving Size</Label>
-                    <Input value={libForm.servingSize} onChange={e => setLibForm(f => ({ ...f, servingSize: e.target.value }))} placeholder="e.g. 8 oz, 1 cup, 2 scoops" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Serving Size</Label>
+                      <Input value={libForm.servingSize} onChange={e => setLibForm(f => ({ ...f, servingSize: e.target.value }))} placeholder="e.g. 8 oz, 1 cup" />
+                    </div>
+                    <div>
+                      <Label>Category</Label>
+                      <Select value={libForm.category || "Other"} onValueChange={v => setLibForm(f => ({ ...f, category: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                        <SelectContent>
+                          {CATEGORIES.filter(c => c !== "All").map(cat => (
+                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label>Calories *</Label><Input type="number" value={libForm.calories} onChange={e => setLibForm(f => ({ ...f, calories: e.target.value }))} placeholder="0" /></div>

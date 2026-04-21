@@ -46,6 +46,7 @@ export interface FoodLibraryItem {
   carbs?: number | null;
   fat?: number | null;
   serving_size?: string | null;
+  category?: string | null;
 }
 
 // ── Weight ──────────────────────────────────────────────────────────────────
