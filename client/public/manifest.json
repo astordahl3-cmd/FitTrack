@@ -2,7 +2,7 @@
   "name": "FitTrack",
   "short_name": "FitTrack",
   "description": "Personal fitness tracker — food, workouts, and weight",
-  "start_url": "/",
+  "start_url": "/FitTrack/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#14b8a6",
