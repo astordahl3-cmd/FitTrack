@@ -78,7 +78,7 @@ export default function Profile() {
   const [sex, setSex] = useState("male");
   const [heightFt, setHeightFt] = useState("5");
   const [heightIn, setHeightIn] = useState("10");
-  const [age, setAge] = useState("");
+  const [birthdate, setBirthdate] = useState("");
 
   // Weight goal
   const [startWeight, setStartWeight] = useState("");
@@ -99,7 +99,17 @@ export default function Profile() {
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalHeightIn = parseInt(heightFt || "0") * 12 + parseInt(heightIn || "0");
   const currentWeightLbs = parseFloat(startWeight) || 0;
-  const ageNum = parseInt(age) || 0;
+
+  // Calculate age from birthdate
+  const ageNum = (() => {
+    if (!birthdate) return 0;
+    const bd = new Date(birthdate);
+    const today = new Date();
+    let years = today.getFullYear() - bd.getFullYear();
+    const m = today.getMonth() - bd.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) years--;
+    return years > 0 ? years : 0;
+  })();
 
   const bmr = (sex && currentWeightLbs && totalHeightIn && ageNum)
     ? calcBMR(sex, currentWeightLbs, totalHeightIn, ageNum)
@@ -169,7 +179,12 @@ export default function Profile() {
           setHeightFt(String(Math.floor(p.height_in / 12)));
           setHeightIn(String(Math.round(p.height_in % 12)));
         }
-        if (p.age) setAge(String(p.age));
+        if (p.birthdate) setBirthdate(p.birthdate);
+        else if (p.age) {
+          // Legacy: back-calculate an approximate birthdate from stored age
+          const approxYear = new Date().getFullYear() - p.age;
+          setBirthdate(`${approxYear}-01-01`);
+        }
         if (p.activity_level) setActivity(p.activity_level);
         setStartWeight(p.start_weight != null ? String(p.start_weight) : "");
         setGoalWeight(p.goal_weight != null ? String(p.goal_weight) : "");
@@ -197,6 +212,7 @@ export default function Profile() {
         display_name:    displayName || null,
         sex:             sex || null,
         height_in:       totalHeightIn || null,
+        birthdate:       birthdate || null,
         age:             ageNum || null,
         activity_level:  activity,
         start_weight:    startWeight ? parseFloat(startWeight) : null,
@@ -251,8 +267,16 @@ export default function Profile() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Age</Label>
-                  <Input type="number" placeholder="e.g. 35" value={age} onChange={e => setAge(e.target.value)} />
+                  <Label>Date of Birth</Label>
+                  <Input
+                    type="date"
+                    value={birthdate}
+                    onChange={e => setBirthdate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                  {ageNum > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">Age: {ageNum} years old</p>
+                  )}
                 </div>
               </div>
               <div>

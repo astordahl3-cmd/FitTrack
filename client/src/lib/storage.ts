@@ -191,7 +191,8 @@ export interface UserProfile {
   fat_target?: number | null;
   sex?: string | null;          // 'male' | 'female'
   height_in?: number | null;   // height in inches
-  age?: number | null;
+  age?: number | null;         // kept for legacy; prefer birthdate
+  birthdate?: string | null;   // ISO date string YYYY-MM-DD
   activity_level?: string | null; // 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active'
 }
 
