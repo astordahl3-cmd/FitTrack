@@ -52,27 +52,34 @@ export default function WeightTracker() {
     notes: "",
   });
 
-  const load = useCallback(() => setEntries(getWeightEntries(90)), []);
+  const load = useCallback(async () => {
+    const data = await getWeightEntries(90);
+    setEntries(data);
+  }, []);
+
   useEffect(() => { load(); }, [load]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.weight) return;
     setSaving(true);
-    addWeight({
-      date: form.date,
-      weight: parseFloat(form.weight),
-      note: form.notes || null,
-    });
-    load();
-    setOpen(false);
-    setForm({ date: format(new Date(), "yyyy-MM-dd"), weight: "", notes: "" });
-    setSaving(false);
-    toast({ title: "Weight logged ✓" });
+    try {
+      await addWeight({
+        date: form.date,
+        weight: parseFloat(form.weight),
+        note: form.notes || null,
+      });
+      await load();
+      setOpen(false);
+      setForm({ date: format(new Date(), "yyyy-MM-dd"), weight: "", notes: "" });
+      toast({ title: "Weight logged ✓" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: number) => {
-    deleteWeight(id);
-    load();
+  const handleDelete = async (id: string) => {
+    await deleteWeight(id);
+    await load();
   };
 
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));

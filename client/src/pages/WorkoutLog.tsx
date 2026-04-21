@@ -66,7 +66,11 @@ export default function WorkoutLog() {
     notes: "",
   });
 
-  const load = useCallback(() => setWorkouts(getRecentWorkouts(30)), []);
+  const load = useCallback(async () => {
+    const data = await getRecentWorkouts(30);
+    setWorkouts(data);
+  }, []);
+
   useEffect(() => { load(); }, [load]);
 
   const applyTemplate = (template: typeof WORKOUT_TEMPLATES[0]) => {
@@ -80,26 +84,28 @@ export default function WorkoutLog() {
     }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSaving(true);
-    addWorkout({
-      date: form.date,
-      type: form.type,
-      name: form.type,
-      duration: parseInt(form.duration),
-      caloriesBurned: form.caloriesBurned ? parseInt(form.caloriesBurned) : null,
-      exercises: JSON.stringify(exercises),
-      notes: form.notes || null,
-    });
-    load();
-    setOpen(false);
-    setSaving(false);
-    toast({ title: "Workout logged ✓" });
+    try {
+      await addWorkout({
+        date: form.date,
+        type: form.type,
+        duration: parseInt(form.duration),
+        calories_burned: form.caloriesBurned ? parseInt(form.caloriesBurned) : null,
+        exercises: exercises,
+        notes: form.notes || null,
+      });
+      await load();
+      setOpen(false);
+      toast({ title: "Workout logged ✓" });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = (id: number) => {
-    deleteWorkout(id);
-    load();
+  const handleDelete = async (id: string) => {
+    await deleteWorkout(id);
+    await load();
   };
 
   const grouped = workouts.reduce((acc, w) => {
@@ -110,7 +116,7 @@ export default function WorkoutLog() {
 
   const totalCalsBurned = workouts
     .filter(w => w.date === format(new Date(), "yyyy-MM-dd"))
-    .reduce((a, w) => a + ((w as any).caloriesBurned ?? 0), 0);
+    .reduce((a, w) => a + (w.calories_burned ?? 0), 0);
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5">
@@ -231,7 +237,7 @@ export default function WorkoutLog() {
               </p>
               <div className="space-y-2">
                 {sessions.map(session => {
-                  const exList = JSON.parse((session as any).exercises || "[]") as string[];
+                  const exList: string[] = Array.isArray(session.exercises) ? session.exercises : [];
                   return (
                     <Card key={session.id}>
                       <CardContent className="p-4">
@@ -242,8 +248,8 @@ export default function WorkoutLog() {
                             </div>
                             <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
                               <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{session.duration} min</span>
-                              {(session as any).caloriesBurned && (
-                                <span className="flex items-center gap-1"><Flame className="h-3 w-3" />~{(session as any).caloriesBurned} kcal</span>
+                              {session.calories_burned != null && (
+                                <span className="flex items-center gap-1"><Flame className="h-3 w-3" />~{session.calories_burned} kcal</span>
                               )}
                             </div>
                             {exList.length > 0 && (

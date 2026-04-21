@@ -39,8 +39,15 @@ export default function FoodLog() {
   const [libForm, setLibForm] = useState(EMPTY_LIB_FORM);
   const [form, setForm] = useState({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
 
-  const loadEntries = useCallback(() => setEntries(getFoodByDate(date)), [date]);
-  const loadLibrary = useCallback(() => setLibrary(getFoodLibrary()), []);
+  const loadEntries = useCallback(async () => {
+    const data = await getFoodByDate(date);
+    setEntries(data);
+  }, [date]);
+
+  const loadLibrary = useCallback(async () => {
+    const data = await getFoodLibrary();
+    setLibrary(data);
+  }, []);
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
   useEffect(() => { loadLibrary(); }, [loadLibrary]);
@@ -66,25 +73,28 @@ export default function FoodLog() {
     setSearch("");
   };
 
-  const handleLogSubmit = () => {
+  const handleLogSubmit = async () => {
     if (!form.name || !form.calories || !form.protein) return;
-    addFood({
+    await addFood({
       date, meal: form.meal, name: form.name,
       calories: parseInt(form.calories),
       protein: parseFloat(form.protein),
       carbs: form.carbs ? parseFloat(form.carbs) : null,
       fat: form.fat ? parseFloat(form.fat) : null,
     });
-    loadEntries();
+    await loadEntries();
     setLogOpen(false);
     setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
     setBarcodeError(null);
     toast({ title: "Food logged ✓" });
   };
 
-  const handleDeleteFood = (id: number) => { deleteFood(id); loadEntries(); };
+  const handleDeleteFood = async (id: string) => {
+    await deleteFood(id);
+    await loadEntries();
+  };
 
-  const handleLibSubmit = () => {
+  const handleLibSubmit = async () => {
     if (!libForm.name || !libForm.calories || !libForm.protein) return;
     const payload = {
       name: libForm.name,
@@ -92,25 +102,29 @@ export default function FoodLog() {
       protein: parseFloat(libForm.protein),
       carbs: libForm.carbs ? parseFloat(libForm.carbs) : null,
       fat: libForm.fat ? parseFloat(libForm.fat) : null,
-      servingSize: libForm.servingSize || null,
+      serving_size: libForm.servingSize || null,
     };
     if (editItem) {
-      updateFoodLibraryItem(editItem.id, payload);
+      await updateFoodLibraryItem(editItem.id, payload);
       toast({ title: "Library item updated ✓" });
     } else {
-      addFoodLibraryItem(payload);
+      await addFoodLibraryItem(payload);
       toast({ title: "Added to library ✓" });
     }
-    loadLibrary();
+    await loadLibrary();
     setLibForm(EMPTY_LIB_FORM);
     setEditItem(null);
   };
 
-  const handleDeleteLib = (id: number) => { deleteFoodLibraryItem(id); loadLibrary(); toast({ title: "Removed from library" }); };
+  const handleDeleteLib = async (id: string) => {
+    await deleteFoodLibraryItem(id);
+    await loadLibrary();
+    toast({ title: "Removed from library" });
+  };
 
   const startEdit = (item: FoodLibraryItem) => {
     setEditItem(item);
-    setLibForm({ name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? ""), servingSize: item.servingSize ?? "" });
+    setLibForm({ name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? ""), servingSize: item.serving_size ?? "" });
   };
 
   const changeDate = (dir: number) => {
@@ -193,7 +207,7 @@ export default function FoodLog() {
                             {item.calories} kcal · {item.protein}g protein
                             {item.carbs != null ? ` · ${item.carbs}g carbs` : ""}
                             {item.fat != null ? ` · ${item.fat}g fat` : ""}
-                            {item.servingSize ? ` · ${item.servingSize}` : ""}
+                            {item.serving_size ? ` · ${item.serving_size}` : ""}
                           </p>
                         </div>
                         <div className="flex gap-1 ml-2 shrink-0">

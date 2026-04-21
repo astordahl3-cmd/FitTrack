@@ -9,9 +9,12 @@ import Dashboard from "@/pages/Dashboard";
 import FoodLog from "@/pages/FoodLog";
 import WorkoutLog from "@/pages/WorkoutLog";
 import WeightTracker from "@/pages/WeightTracker";
+import Auth from "@/pages/Auth";
 import NotFound from "@/pages/not-found";
-import { Menu } from "lucide-react";
+import { Menu, LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
+import type { User } from "@supabase/supabase-js";
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [dark, setDark] = useState(
@@ -23,8 +26,12 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function Layout() {
+function Layout({ user }: { user: User }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -42,7 +49,7 @@ function Layout() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+        <Sidebar onClose={() => setSidebarOpen(false)} onSignOut={handleSignOut} user={user} />
       </div>
 
       {/* Main content */}
@@ -53,11 +60,13 @@ function Layout() {
             variant="ghost"
             size="icon"
             onClick={() => setSidebarOpen(true)}
-            data-testid="button-menu"
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <span className="font-semibold text-foreground">FitTrack</span>
+          <span className="font-semibold text-foreground flex-1">FitTrack</span>
+          <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
 
         <main className="flex-1 overflow-y-auto">
@@ -75,11 +84,37 @@ function Layout() {
 }
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <Router hook={useHashLocation}>
-          <Layout />
+          {user ? <Layout user={user} /> : <Auth />}
         </Router>
         <Toaster />
       </ThemeProvider>

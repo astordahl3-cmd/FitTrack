@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Utensils, Dumbbell, Scale, X } from "lucide-react";
+import { LayoutDashboard, Utensils, Dumbbell, Scale, X, LogOut } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -10,9 +11,11 @@ const navItems = [
 
 interface SidebarProps {
   onClose: () => void;
+  onSignOut?: () => void;
+  user?: User | null;
 }
 
-export default function Sidebar({ onClose }: SidebarProps) {
+export default function Sidebar({ onClose, onSignOut, user }: SidebarProps) {
   const [location] = useLocation();
 
   return (
@@ -88,12 +91,22 @@ export default function Sidebar({ onClose }: SidebarProps) {
       </nav>
 
       {/* Daily targets reminder */}
-      <div className="mx-3 mb-4 rounded-lg bg-sidebar-accent px-3 py-3 text-xs text-sidebar-foreground space-y-1">
+      <div className="mx-3 rounded-lg bg-sidebar-accent px-3 py-3 text-xs text-sidebar-foreground space-y-1">
         <p className="font-semibold text-sidebar-accent-foreground">Daily Targets</p>
         <p>🔥 2,100–2,200 kcal</p>
         <p>🥩 200–220g protein</p>
         <p>🏋️ Treadmill + Lift + Sauna</p>
       </div>
+
+      {/* User + sign out */}
+      {user && (
+        <div className="mx-3 mb-4 mt-3 flex items-center justify-between">
+          <p className="text-xs text-sidebar-foreground truncate">{user.email}</p>
+          <button onClick={onSignOut} className="text-sidebar-foreground hover:text-white transition-colors ml-2 shrink-0" title="Sign out">
+            <LogOut className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
