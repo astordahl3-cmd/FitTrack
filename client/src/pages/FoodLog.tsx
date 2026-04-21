@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Search, BookOpen, Pencil, ScanBarcode, Loader2 } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Search, BookOpen, Pencil, ScanBarcode, Loader2, Flag } from "lucide-react";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,16 @@ export default function FoodLog() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
+  // Stores raw OFF response for the last scan — used by the "Flag bad data" button
+  const [lastScanRaw, setLastScanRaw] = useState<{
+    barcode: string;
+    productName: string;
+    rawNutriments: Record<string, any>;
+    parsedKcal: number;
+    parsedProtein: number;
+    parsedCarbs: number;
+    parsedFat: number;
+  } | null>(null);
 
   const [search, setSearch] = useState("");
   const [libSearch, setLibSearch] = useState("");
@@ -237,14 +247,25 @@ export default function FoodLog() {
       const carbs   = pick("carbohydrates_serving", "carbohydrates_100g", "carbohydrates");
       const fat     = pick("fat_serving", "fat_100g", "fat");
 
+      const parsedName = p.product_name || p.abbreviated_product_name || "Unknown Product";
       setForm(f => ({
         ...f,
-        name: p.product_name || p.abbreviated_product_name || "Unknown Product",
+        name: parsedName,
         calories: String(Math.round(kcal)),
         protein:  String(Math.round(protein * 10) / 10),
         carbs:    String(Math.round(carbs * 10) / 10),
         fat:      String(Math.round(fat * 10) / 10),
       }));
+      // Store raw data so the flag button can build a pre-filled GitHub issue
+      setLastScanRaw({
+        barcode,
+        productName: parsedName,
+        rawNutriments: n,
+        parsedKcal: Math.round(kcal),
+        parsedProtein: Math.round(protein * 10) / 10,
+        parsedCarbs: Math.round(carbs * 10) / 10,
+        parsedFat: Math.round(fat * 10) / 10,
+      });
     } catch (e: any) {
       if (e?.name === "TimeoutError" || e?.name === "AbortError") {
         setBarcodeError("Request timed out — check your connection and try again.");
@@ -380,7 +401,7 @@ export default function FoodLog() {
           </Dialog>
 
           {/* Add Food */}
-          <Dialog open={logOpen} onOpenChange={v => { setLogOpen(v); if (!v) { setBarcodeError(null); setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" }); } }}>
+          <Dialog open={logOpen} onOpenChange={v => { setLogOpen(v); if (!v) { setBarcodeError(null); setLastScanRaw(null); setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" }); } }}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="h-4 w-4 mr-1.5" /> Add Food</Button>
             </DialogTrigger>
@@ -442,6 +463,56 @@ export default function FoodLog() {
                 <Button onClick={handleLogSubmit} disabled={logSaving} className="w-full">
                   {logSaving ? "Saving..." : "Log Food"}
                 </Button>
+
+                {/* Flag bad data — only shown after a barcode scan */}
+                {lastScanRaw && (
+                  <div className="rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-950/30 px-3 py-2.5">
+                    <p className="text-xs text-yellow-800 dark:text-yellow-300 font-medium mb-1.5">
+                      Scanned from Open Food Facts · Does the data look wrong?
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-yellow-800 dark:text-yellow-300 border-yellow-400 dark:border-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/40 text-xs h-8"
+                      onClick={() => {
+                        const r = lastScanRaw;
+                        const relevantFields = Object.entries(r.rawNutriments)
+                          .filter(([k]) => /energy|kcal|kj|protein|carb|fat/i.test(k))
+                          .map(([k, v]) => `  ${k}: ${v}`)
+                          .join('\n');
+                        const body = [
+                          `## Product`,
+                          `- **Name:** ${r.productName}`,
+                          `- **Barcode:** \`${r.barcode}\``,
+                          `- **OFF page:** https://world.openfoodfacts.org/product/${r.barcode}`,
+                          ``,
+                          `## What FitTrack Parsed`,
+                          `| Field | Value |`,
+                          `|---|---|`,
+                          `| Calories | ${r.parsedKcal} kcal |`,
+                          `| Protein | ${r.parsedProtein}g |`,
+                          `| Carbs | ${r.parsedCarbs}g |`,
+                          `| Fat | ${r.parsedFat}g |`,
+                          ``,
+                          `## Raw OFF Nutriment Fields`,
+                          `\`\`\``,
+                          relevantFields,
+                          `\`\`\``,
+                          ``,
+                          `## What's Wrong`,
+                          `<!-- Describe what looks incorrect e.g. "Calories show 0" or "Protein is 10x too high" -->`,
+                        ].join('\n');
+                        const url = `https://github.com/astordahl3-cmd/FitTrack/issues/3` +
+                          `?title=${encodeURIComponent(`[BAD DATA] ${r.productName} (${r.barcode})`)}` +
+                          `&body=${encodeURIComponent(body)}`;
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      }}
+                    >
+                      <Flag className="h-3 w-3 mr-1.5" />
+                      Flag bad data on GitHub
+                    </Button>
+                  </div>
+                )}
               </div>
             </DialogContent>
           </Dialog>
