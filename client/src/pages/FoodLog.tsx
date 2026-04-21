@@ -555,6 +555,7 @@ export default function FoodLog() {
                         ].join('\n');
                         const url = `https://github.com/astordahl3-cmd/FitTrack/issues/new` +
                           `?template=bad_data_report.md` +
+                          `&labels=bad-data` +
                           `&title=${encodeURIComponent(`[BAD DATA] ${r.productName} (${r.barcode})`)}` +
                           `&body=${encodeURIComponent(body)}`;
                         window.open(url, '_blank', 'noopener,noreferrer');
