@@ -1,4 +1,4 @@
-const CACHE = 'fittrack-v1';
+const CACHE = 'fittrack-v5';
 const STATIC = ['/'];
 
 self.addEventListener('install', e => {
