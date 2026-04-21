@@ -177,6 +177,41 @@ export async function deleteFoodLibraryItem(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ── User Profile ─────────────────────────────────────────────────────────────
+
+export interface UserProfile {
+  id: string;
+  display_name?: string | null;
+  start_weight?: number | null;
+  goal_weight?: number | null;
+  goal_date?: string | null;
+  calorie_target?: number | null;
+  protein_target?: number | null;
+  carb_target?: number | null;
+  fat_target?: number | null;
+}
+
+export async function getProfile(): Promise<UserProfile | null> {
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .single();
+  if (error && error.code !== "PGRST116") throw error;
+  return data ?? null;
+}
+
+export async function saveProfile(updates: Partial<Omit<UserProfile, "id">>): Promise<UserProfile> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .upsert({ id: user.id, ...updates })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // ── Daily Summary ─────────────────────────────────────────────────────────────
 
 export async function getDailySummary(date: string) {

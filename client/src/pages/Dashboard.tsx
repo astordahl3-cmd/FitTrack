@@ -4,12 +4,8 @@ import { Scale, Utensils, Dumbbell, TrendingDown, Flame, Beef } from "lucide-rea
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { getDailySummary, getWeightEntries } from "@/lib/storage";
-
-const CALORIE_TARGET = 2200;
-const PROTEIN_TARGET = 210;
-const GOAL_START = 255;
-const GOAL_END = 235;
+import { getDailySummary, getWeightEntries, getProfile } from "@/lib/storage";
+import type { UserProfile } from "@/lib/storage";
 
 function MacroRing({ value, max, color, label, unit = "g" }: {
   value: number; max: number; color: string; label: string; unit?: string;
@@ -56,13 +52,15 @@ export default function Dashboard() {
   const today = format(new Date(), "yyyy-MM-dd");
   const [summary, setSummary] = useState<any>(null);
   const [latestWeight, setLatestWeight] = useState<number | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     try {
-      const [s, wh] = await Promise.all([getDailySummary(today), getWeightEntries(7)]);
+      const [s, wh, prof] = await Promise.all([getDailySummary(today), getWeightEntries(7), getProfile()]);
       setSummary(s);
       setLatestWeight(wh[0]?.weight ?? null);
+      setProfile(prof);
     } catch (e) {
       console.error(e);
     } finally {
@@ -76,7 +74,18 @@ export default function Dashboard() {
     return () => window.removeEventListener("focus", load);
   }, []);
 
-  const pct = latestWeight ? Math.round(((GOAL_START - latestWeight) / (GOAL_START - GOAL_END)) * 100) : 0;
+  // Targets — from profile with sensible fallbacks
+  const CALORIE_TARGET = profile?.calorie_target ?? 2200;
+  const PROTEIN_TARGET = profile?.protein_target ?? 210;
+  const CARB_TARGET = profile?.carb_target ?? 130;
+  const FAT_TARGET = profile?.fat_target ?? 90;
+  const GOAL_START = profile?.start_weight ?? 255;
+  const GOAL_END = profile?.goal_weight ?? 235;
+  const GOAL_DATE = profile?.goal_date ? new Date(profile.goal_date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Jul 1";
+
+  const pct = latestWeight && GOAL_START !== GOAL_END
+    ? Math.max(0, Math.min(100, Math.round(((GOAL_START - latestWeight) / (GOAL_START - GOAL_END)) * 100)))
+    : 0;
   const caloriesLeft = CALORIE_TARGET - (summary?.calories ?? 0);
   const proteinLeft = PROTEIN_TARGET - (summary?.protein ?? 0);
 
@@ -101,9 +110,9 @@ export default function Dashboard() {
             <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${Math.max(pct, 0)}%` }} />
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>255 lbs</span>
+            <span>{GOAL_START} lbs</span>
             <span className="font-medium text-foreground">{latestWeight ? `Current: ${latestWeight} lbs` : "Log your weight"}</span>
-            <span>235 lbs · Jul 1</span>
+            <span>{GOAL_END} lbs · {GOAL_DATE}</span>
           </div>
         </CardContent>
       </Card>
@@ -119,8 +128,8 @@ export default function Dashboard() {
               <div className="flex justify-around py-2">
                 <MacroRing value={summary?.calories ?? 0} max={CALORIE_TARGET} color="hsl(220 70% 55%)" label="Calories" unit="kcal" />
                 <MacroRing value={summary?.protein ?? 0} max={PROTEIN_TARGET} color="hsl(174 88% 25%)" label="Protein" />
-                <MacroRing value={summary?.carbs ?? 0} max={130} color="hsl(38 92% 50%)" label="Carbs" />
-                <MacroRing value={summary?.fat ?? 0} max={90} color="hsl(0 72% 51%)" label="Fat" />
+                <MacroRing value={summary?.carbs ?? 0} max={CARB_TARGET} color="hsl(38 92% 50%)" label="Carbs" />
+                <MacroRing value={summary?.fat ?? 0} max={FAT_TARGET} color="hsl(0 72% 51%)" label="Fat" />
               </div>
               <div className="flex gap-3 mt-3">
                 <div className={`flex-1 rounded-lg px-3 py-2 text-center ${caloriesLeft >= 0 ? "bg-blue-50 dark:bg-blue-950/30" : "bg-red-50 dark:bg-red-950/30"}`}>

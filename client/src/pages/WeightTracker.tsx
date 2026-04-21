@@ -7,18 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { getWeightEntries, addWeight, deleteWeight } from "@/lib/storage";
-import type { WeightEntry } from "@/lib/storage";
+import { getWeightEntries, addWeight, deleteWeight, getProfile } from "@/lib/storage";
+import type { WeightEntry, UserProfile } from "@/lib/storage";
 
-const GOAL_START = 255;
-const GOAL_END = 235;
-const GOAL_DATE = new Date("2026-07-01");
-
-function MiniChart({ entries }: { entries: WeightEntry[] }) {
+function MiniChart({ entries, goalEnd }: { entries: WeightEntry[]; goalEnd: number }) {
   if (entries.length < 2) return null;
   const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
   const weights = sorted.map(e => e.weight);
-  const minW = Math.min(...weights) - 2;
+  const minW = Math.min(...weights, goalEnd) - 2;
   const maxW = Math.max(...weights) + 2;
   const W = 100, H = 60;
   const pts = sorted.map((e, i) => {
@@ -26,7 +22,7 @@ function MiniChart({ entries }: { entries: WeightEntry[] }) {
     const y = H - ((e.weight - minW) / (maxW - minW)) * H;
     return `${x},${y}`;
   }).join(" ");
-  const goalY = H - ((GOAL_END - minW) / (maxW - minW)) * H;
+  const goalY = H - ((goalEnd - minW) / (maxW - minW)) * H;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-28 mt-1" preserveAspectRatio="none">
       <line x1="0" y1={goalY} x2={W} y2={goalY} stroke="hsl(38 92% 50%)" strokeWidth="0.8" strokeDasharray="3 2" />
@@ -36,7 +32,7 @@ function MiniChart({ entries }: { entries: WeightEntry[] }) {
         const y = H - ((e.weight - minW) / (maxW - minW)) * H;
         return <circle key={i} cx={x} cy={y} r="2" fill="hsl(174 88% 25%)" />;
       })}
-      <text x={W - 1} y={goalY - 2} textAnchor="end" fontSize="5" fill="hsl(38 92% 50%)" fontFamily="DM Sans, sans-serif">235 goal</text>
+      <text x={W - 1} y={Math.max(goalY - 2, 6)} textAnchor="end" fontSize="5" fill="hsl(38 92% 50%)" fontFamily="DM Sans, sans-serif">{goalEnd} goal</text>
     </svg>
   );
 }
@@ -45,6 +41,7 @@ export default function WeightTracker() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<WeightEntry[]>([]);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
@@ -53,8 +50,9 @@ export default function WeightTracker() {
   });
 
   const load = useCallback(async () => {
-    const data = await getWeightEntries(90);
+    const [data, prof] = await Promise.all([getWeightEntries(90), getProfile()]);
     setEntries(data);
+    setProfile(prof);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -82,6 +80,11 @@ export default function WeightTracker() {
     await load();
   };
 
+  const GOAL_START = profile?.start_weight ?? 255;
+  const GOAL_END = profile?.goal_weight ?? 235;
+  const GOAL_DATE = profile?.goal_date ? new Date(profile.goal_date) : new Date("2026-07-01");
+  const GOAL_DATE_LABEL = GOAL_DATE.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
   const latest = sorted[0];
   const prev = sorted[1];
@@ -89,10 +92,12 @@ export default function WeightTracker() {
   const currentWeight = latest?.weight ?? GOAL_START;
   const lbsLost = GOAL_START - currentWeight;
   const lbsToGo = currentWeight - GOAL_END;
-  const pct = Math.max(0, Math.min(100, Math.round((lbsLost / (GOAL_START - GOAL_END)) * 100)));
+  const pct = GOAL_START !== GOAL_END
+    ? Math.max(0, Math.min(100, Math.round((lbsLost / (GOAL_START - GOAL_END)) * 100)))
+    : 0;
 
   const daysLeft = differenceInDays(GOAL_DATE, new Date());
-  const weeklyRateNeeded = lbsToGo / (daysLeft / 7);
+  const weeklyRateNeeded = daysLeft > 0 ? lbsToGo / (daysLeft / 7) : 0;
   const weeklyActual = entries.length >= 7 ? (() => {
     const recent = sorted.slice(0, 7);
     const oldest = recent[recent.length - 1];
@@ -170,14 +175,14 @@ export default function WeightTracker() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Target className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold">255 → 235 lbs by July 1</span>
+              <span className="text-sm font-semibold">{GOAL_START} → {GOAL_END} lbs by {GOAL_DATE_LABEL}</span>
             </div>
             <span className="text-sm font-bold text-primary">{pct}%</span>
           </div>
           <div className="h-3 rounded-full bg-muted overflow-hidden mb-3">
             <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${pct}%` }} />
           </div>
-          <MiniChart entries={entries} />
+          <MiniChart entries={entries} goalEnd={GOAL_END} />
           <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
             <div className="bg-muted rounded-lg px-3 py-2">
               <p className="text-muted-foreground">Days left</p>
@@ -210,17 +215,20 @@ export default function WeightTracker() {
       {/* Milestones */}
       <Card>
         <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold">10-Week Milestones</CardTitle>
+          <CardTitle className="text-sm font-semibold">Milestones</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-2">
-          {[
-            { label: "Wk 1–2", target: 252, date: "May 4" },
-            { label: "Wk 3–4", target: 249, date: "May 18" },
-            { label: "Wk 5–6", target: 245, date: "Jun 1" },
-            { label: "Wk 7–8", target: 241, date: "Jun 15" },
-            { label: "Wk 9–10", target: 237, date: "Jun 29" },
-            { label: "Goal", target: 235, date: "Jul 1" },
-          ].map(m => {
+          {(() => {
+            const totalLbs = GOAL_START - GOAL_END;
+            const steps = 5;
+            const lbsPerStep = totalLbs / steps;
+            const msPerStep = (GOAL_DATE.getTime() - Date.now()) / steps;
+            return Array.from({ length: steps }, (_, i) => ({
+              label: `Milestone ${i + 1}`,
+              target: Math.round((GOAL_START - lbsPerStep * (i + 1)) * 10) / 10,
+              date: new Date(Date.now() + msPerStep * (i + 1)).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            })).concat([{ label: "Goal", target: GOAL_END, date: GOAL_DATE.toLocaleDateString("en-US", { month: "short", day: "numeric" }) }]);
+          })().map(m => {
             const hit = currentWeight <= m.target;
             return (
               <div key={m.label} className="flex items-center justify-between py-1">

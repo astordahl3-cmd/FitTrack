@@ -9,6 +9,7 @@ import Dashboard from "@/pages/Dashboard";
 import FoodLog from "@/pages/FoodLog";
 import WorkoutLog from "@/pages/WorkoutLog";
 import WeightTracker from "@/pages/WeightTracker";
+import Profile from "@/pages/Profile";
 import Auth from "@/pages/Auth";
 import NotFound from "@/pages/not-found";
 import { Menu, LogOut, Loader2 } from "lucide-react";
@@ -75,6 +76,7 @@ function Layout({ user }: { user: User }) {
             <Route path="/food" component={FoodLog} />
             <Route path="/workout" component={WorkoutLog} />
             <Route path="/weight" component={WeightTracker} />
+            <Route path="/profile" component={Profile} />
             <Route component={NotFound} />
           </Switch>
         </main>

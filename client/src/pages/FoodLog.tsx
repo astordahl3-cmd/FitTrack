@@ -13,12 +13,11 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getFoodByDate, addFood, deleteFood,
   getFoodLibrary, addFoodLibraryItem, updateFoodLibraryItem, deleteFoodLibraryItem,
+  getProfile,
 } from "@/lib/storage";
-import type { FoodEntry, FoodLibraryItem } from "@/lib/storage";
+import type { FoodEntry, FoodLibraryItem, UserProfile } from "@/lib/storage";
 
 const MEAL_TIMES = ["Noon", "3 PM", "6 PM", "8 PM", "Other"];
-const CALORIE_TARGET = 2200;
-const PROTEIN_TARGET = 210;
 const EMPTY_LIB_FORM = { name: "", calories: "", protein: "", carbs: "", fat: "", servingSize: "", category: "" };
 const CATEGORIES = [
   "All",
@@ -35,6 +34,18 @@ export default function FoodLog() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [library, setLibrary] = useState<FoodLibraryItem[]>([]);
+
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  const loadProfile = useCallback(async () => {
+    const p = await getProfile();
+    setProfile(p);
+  }, []);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  const CALORIE_TARGET = profile?.calorie_target ?? 2200;
+  const PROTEIN_TARGET = profile?.protein_target ?? 210;
 
   const [logOpen, setLogOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);

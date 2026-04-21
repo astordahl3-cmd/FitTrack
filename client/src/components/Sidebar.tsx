@@ -1,12 +1,16 @@
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Utensils, Dumbbell, Scale, X, LogOut } from "lucide-react";
+import { LayoutDashboard, Utensils, Dumbbell, Scale, X, LogOut, UserCog } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+import { getProfile } from "@/lib/storage";
+import type { UserProfile } from "@/lib/storage";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/food", label: "Food Log", icon: Utensils },
   { href: "/workout", label: "Workouts", icon: Dumbbell },
   { href: "/weight", label: "Weight", icon: Scale },
+  { href: "/profile", label: "Profile", icon: UserCog },
 ];
 
 interface SidebarProps {
@@ -17,6 +21,11 @@ interface SidebarProps {
 
 export default function Sidebar({ onClose, onSignOut, user }: SidebarProps) {
   const [location] = useLocation();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    getProfile().then(setProfile).catch(() => {});
+  }, []);
 
   return (
     <div className="h-full bg-sidebar flex flex-col">
@@ -50,19 +59,19 @@ export default function Sidebar({ onClose, onSignOut, user }: SidebarProps) {
       </div>
 
       {/* Goal banner */}
-      <div className="mx-3 mt-4 rounded-lg bg-sidebar-accent px-3 py-2.5">
-        <p className="text-xs text-sidebar-foreground font-medium">Goal</p>
-        <p className="text-sm text-sidebar-accent-foreground font-semibold">
-          255 → 235 lbs
-        </p>
-        <p className="text-xs text-sidebar-foreground mt-0.5">By July 1, 2026</p>
-        <div className="mt-2 h-1.5 rounded-full bg-sidebar-border overflow-hidden">
-          <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: "0%" }}
-          />
+      {(profile?.start_weight || profile?.goal_weight) && (
+        <div className="mx-3 mt-4 rounded-lg bg-sidebar-accent px-3 py-2.5">
+          <p className="text-xs text-sidebar-foreground font-medium">Goal</p>
+          <p className="text-sm text-sidebar-accent-foreground font-semibold">
+            {profile.start_weight ?? "?"} → {profile.goal_weight ?? "?"} lbs
+          </p>
+          {profile.goal_date && (
+            <p className="text-xs text-sidebar-foreground mt-0.5">
+              By {new Date(profile.goal_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            </p>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
@@ -90,12 +99,13 @@ export default function Sidebar({ onClose, onSignOut, user }: SidebarProps) {
         })}
       </nav>
 
-      {/* Daily targets reminder */}
+      {/* Daily targets */}
       <div className="mx-3 rounded-lg bg-sidebar-accent px-3 py-3 text-xs text-sidebar-foreground space-y-1">
         <p className="font-semibold text-sidebar-accent-foreground">Daily Targets</p>
-        <p>🔥 2,100–2,200 kcal</p>
-        <p>🥩 200–220g protein</p>
-        <p>🏋️ Treadmill + Lift + Sauna</p>
+        <p>🔥 {(profile?.calorie_target ?? 2200).toLocaleString()} kcal</p>
+        <p>🥩 {profile?.protein_target ?? 210}g protein</p>
+        {profile?.carb_target != null && <p>🌾 {profile.carb_target}g carbs</p>}
+        {profile?.fat_target != null && <p>🧈 {profile.fat_target}g fat</p>}
       </div>
 
       {/* User + sign out */}
