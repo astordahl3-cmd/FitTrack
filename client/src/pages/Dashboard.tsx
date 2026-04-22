@@ -235,10 +235,14 @@ export default function Dashboard() {
             <div className="flex justify-around py-6 text-muted-foreground text-sm">Loading...</div>
           ) : (
             <>
+              {/* Row 1: Calories + Protein + Carbs */}
               <div className="flex justify-around py-2">
                 <MacroRing value={summary?.calories ?? 0} max={CALORIE_TARGET} color="hsl(220 70% 55%)" label="Calories" unit="kcal" />
                 <MacroRing value={summary?.protein ?? 0} max={PROTEIN_TARGET} color="hsl(174 88% 25%)" label="Protein" />
                 <MacroRing value={summary?.carbs ?? 0} max={CARB_TARGET} color="hsl(38 92% 50%)" label="Carbs" />
+              </div>
+              {/* Row 2: Fat + Fiber */}
+              <div className="flex justify-around pb-2">
                 <MacroRing value={summary?.fat ?? 0} max={FAT_TARGET} color="hsl(0 72% 51%)" label="Fat" />
                 <MacroRing value={Math.round((summary?.fiber ?? 0) * 10) / 10} max={25} color="hsl(142 71% 45%)" label="Fiber" />
               </div>
