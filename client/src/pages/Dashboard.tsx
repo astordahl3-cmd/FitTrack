@@ -12,8 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { getDailySummary, getWeightEntries, getProfile, addFood, getFoodLibrary, addFoodLibraryItem } from "@/lib/storage";
 import type { UserProfile, FoodLibraryItem } from "@/lib/storage";
 
-const MEAL_TIMES = ["Noon", "3 PM", "6 PM", "8 PM", "Other"];
-const EMPTY_FORM = { meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" };
+const MEAL_TIMES = ["6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM", "Noon", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "Other"];
+const EMPTY_FORM = { meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" };
 
 function MacroRing({ value, max, color, label, unit = "g" }: {
   value: number; max: number; color: string; label: string; unit?: string;
@@ -107,7 +107,7 @@ export default function Dashboard() {
     if (!form.name || !form.calories || !form.protein) return;
     setSaving(true);
     try {
-      await addFood({ date: today, meal: form.meal, name: form.name, calories: parseInt(form.calories), protein: parseFloat(form.protein), carbs: form.carbs ? parseFloat(form.carbs) : null, fat: form.fat ? parseFloat(form.fat) : null });
+      await addFood({ date: today, meal: form.meal, name: form.name, calories: parseInt(form.calories), protein: parseFloat(form.protein), carbs: form.carbs ? parseFloat(form.carbs) : null, fat: form.fat ? parseFloat(form.fat) : null, fiber: (form as any).fiber ? parseFloat((form as any).fiber) : null });
       const alreadyInLibrary = library.some(l => l.name.toLowerCase() === form.name.toLowerCase());
       if (!alreadyInLibrary) {
         await addFoodLibraryItem({ name: form.name, calories: parseInt(form.calories), protein: parseFloat(form.protein), carbs: form.carbs ? parseFloat(form.carbs) : null, fat: form.fat ? parseFloat(form.fat) : null, serving_size: null, category: "Other" });
@@ -240,6 +240,7 @@ export default function Dashboard() {
                 <MacroRing value={summary?.protein ?? 0} max={PROTEIN_TARGET} color="hsl(174 88% 25%)" label="Protein" />
                 <MacroRing value={summary?.carbs ?? 0} max={CARB_TARGET} color="hsl(38 92% 50%)" label="Carbs" />
                 <MacroRing value={summary?.fat ?? 0} max={FAT_TARGET} color="hsl(0 72% 51%)" label="Fat" />
+                <MacroRing value={Math.round((summary?.fiber ?? 0) * 10) / 10} max={25} color="hsl(142 71% 45%)" label="Fiber" />
               </div>
               <div className="flex gap-3 mt-3">
                 <div className={`flex-1 rounded-lg px-3 py-2 text-center ${caloriesLeft >= 0 ? "bg-blue-50 dark:bg-blue-950/30" : "bg-red-50 dark:bg-red-950/30"}`}>

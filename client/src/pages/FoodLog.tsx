@@ -17,7 +17,7 @@ import {
 } from "@/lib/storage";
 import type { FoodEntry, FoodLibraryItem, UserProfile } from "@/lib/storage";
 
-const MEAL_TIMES = ["Noon", "3 PM", "6 PM", "8 PM", "Other"];
+const MEAL_TIMES = ["6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM", "Noon", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "Other"];
 const EMPTY_LIB_FORM = { name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "", servingSize: "", category: "" };
 const CATEGORIES = [
   "All",

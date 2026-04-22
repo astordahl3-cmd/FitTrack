@@ -243,8 +243,9 @@ export async function getDailySummary(date: string) {
       protein: acc.protein + e.protein,
       carbs: acc.carbs + (e.carbs ?? 0),
       fat: acc.fat + (e.fat ?? 0),
+      fiber: acc.fiber + (e.fiber ?? 0),
     }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
   );
 
   return { ...totals, foodEntries, workouts, weight };
