@@ -24,6 +24,7 @@ export interface FoodEntry {
   protein: number;
   carbs?: number | null;
   fat?: number | null;
+  fiber?: number | null;
   created_at: string;
 }
 
@@ -45,6 +46,7 @@ export interface FoodLibraryItem {
   protein: number;
   carbs?: number | null;
   fat?: number | null;
+  fiber?: number | null;
   serving_size?: string | null;
   category?: string | null;
 }

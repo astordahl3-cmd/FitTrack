@@ -18,7 +18,7 @@ import {
 import type { FoodEntry, FoodLibraryItem, UserProfile } from "@/lib/storage";
 
 const MEAL_TIMES = ["Noon", "3 PM", "6 PM", "8 PM", "Other"];
-const EMPTY_LIB_FORM = { name: "", calories: "", protein: "", carbs: "", fat: "", servingSize: "", category: "" };
+const EMPTY_LIB_FORM = { name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "", servingSize: "", category: "" };
 const CATEGORIES = [
   "All",
   "🥤 Shakes & Supplements",
@@ -80,7 +80,11 @@ export default function FoodLog() {
   const [libCategory, setLibCategory] = useState("All");
   const [editItem, setEditItem] = useState<FoodLibraryItem | null>(null);
   const [libForm, setLibForm] = useState(EMPTY_LIB_FORM);
-  const [form, setForm] = useState({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
+  const [form, setForm] = useState({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
+  // Serving size: "1" = 1 full serving, "0.5" = half, custom number allowed
+  const [servingQty, setServingQty] = useState("1");
+  const [servingUnit, setServingUnit] = useState(""); // e.g. "banana", "oz of milk" — from library serving_size
+  const [baseForm, setBaseForm] = useState<{ calories: string; protein: string; carbs: string; fat: string; fiber: string } | null>(null); // per-1-serving values from library
 
   const loadEntries = useCallback(async () => {
     const data = await getFoodByDate(date);
@@ -95,10 +99,24 @@ export default function FoodLog() {
   useEffect(() => { loadEntries(); }, [loadEntries]);
   useEffect(() => { loadLibrary(); }, [loadLibrary]);
 
+  // Recompute macros whenever serving qty changes
+  const applyServing = (qty: string, base: typeof baseForm) => {
+    if (!base) return;
+    const q = parseFloat(qty) || 1;
+    setForm(f => ({
+      ...f,
+      calories: String(Math.round(parseFloat(base.calories) * q)),
+      protein:  String(Math.round(parseFloat(base.protein)  * q * 10) / 10),
+      carbs:    base.carbs  ? String(Math.round(parseFloat(base.carbs)  * q * 10) / 10) : "",
+      fat:      base.fat    ? String(Math.round(parseFloat(base.fat)    * q * 10) / 10) : "",
+      fiber:    base.fiber  ? String(Math.round(parseFloat(base.fiber)  * q * 10) / 10) : "",
+    }));
+  };
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const totals = entries.reduce(
-    (acc, e) => ({ cal: acc.cal + e.calories, prot: acc.prot + e.protein }),
-    { cal: 0, prot: 0 }
+    (acc, e) => ({ cal: acc.cal + e.calories, prot: acc.prot + e.protein, fiber: acc.fiber + (e.fiber ?? 0) }),
+    { cal: 0, prot: 0, fiber: 0 }
   );
 
   const filteredLibrary = library.filter(l => l.name.toLowerCase().includes(search.toLowerCase()));
@@ -116,7 +134,17 @@ export default function FoodLog() {
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const fillFromLibrary = (item: FoodLibraryItem) => {
-    setForm(f => ({ ...f, name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? "") }));
+    const base = {
+      calories: String(item.calories),
+      protein:  String(item.protein),
+      carbs:    String(item.carbs  ?? ""),
+      fat:      String(item.fat    ?? ""),
+      fiber:    String(item.fiber  ?? ""),
+    };
+    setBaseForm(base);
+    setServingQty("1");
+    setServingUnit(item.serving_size ?? "");
+    setForm(f => ({ ...f, name: item.name, ...base }));
     setSearch("");
   };
 
@@ -132,10 +160,14 @@ export default function FoodLog() {
         protein: parseFloat(form.protein),
         carbs: form.carbs ? parseFloat(form.carbs) : null,
         fat: form.fat ? parseFloat(form.fat) : null,
+        fiber: form.fiber ? parseFloat(form.fiber) : null,
       });
       await loadEntries();
       setLogOpen(false);
-      setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" });
+      setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
+      setBaseForm(null);
+      setServingQty("1");
+      setServingUnit("");
       setBarcodeError(null);
       toast({ title: "Food logged ✓" });
     } catch (e: any) {
@@ -166,6 +198,7 @@ export default function FoodLog() {
         protein: parseFloat(libForm.protein),
         carbs: libForm.carbs ? parseFloat(libForm.carbs) : null,
         fat: libForm.fat ? parseFloat(libForm.fat) : null,
+        fiber: libForm.fiber ? parseFloat(libForm.fiber) : null,
         serving_size: libForm.servingSize || null,
         category: libForm.category || "Other",
       };
@@ -198,7 +231,7 @@ export default function FoodLog() {
 
   const startEdit = (item: FoodLibraryItem) => {
     setEditItem(item);
-    setLibForm({ name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? ""), servingSize: item.serving_size ?? "", category: item.category ?? "" });
+    setLibForm({ name: item.name, calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs ?? ""), fat: String(item.fat ?? ""), fiber: String(item.fiber ?? ""), servingSize: item.serving_size ?? "", category: item.category ?? "" });
   };
 
   const changeDate = (dir: number) => {
@@ -258,16 +291,24 @@ export default function FoodLog() {
       const protein = pick("proteins_serving", "proteins_100g", "proteins");
       const carbs   = pick("carbohydrates_serving", "carbohydrates_100g", "carbohydrates");
       const fat     = pick("fat_serving", "fat_100g", "fat");
+      const fiber   = pick("fiber_serving", "fiber_100g", "fiber");
 
       const parsedName = p.product_name || p.abbreviated_product_name || "Unknown Product";
-      setForm(f => ({
-        ...f,
-        name: parsedName,
+      const parsedFiber = Math.round(fiber * 10) / 10;
+
+      // Store as base for serving multiplier
+      const base = {
         calories: String(Math.round(kcal)),
         protein:  String(Math.round(protein * 10) / 10),
         carbs:    String(Math.round(carbs * 10) / 10),
         fat:      String(Math.round(fat * 10) / 10),
-      }));
+        fiber:    parsedFiber > 0 ? String(parsedFiber) : "",
+      };
+      setBaseForm(base);
+      setServingQty("1");
+      setServingUnit("");
+      setForm(f => ({ ...f, name: parsedName, ...base }));
+
       // Store raw data so the flag button can build a pre-filled GitHub issue
       setLastScanRaw({
         barcode,
@@ -342,18 +383,20 @@ export default function FoodLog() {
 
       // Pre-fill form with totals — user can review before logging
       const t = result.totals;
-      // Build a readable food name from identified items
       const name = result.foods.length === 1
         ? result.foods[0].name
         : result.foods.map((f: any) => f.name).join(', ');
-      setForm(f => ({
-        ...f,
-        name: name || 'AI Photo Estimate',
+      const photoBase = {
         calories: String(Math.round(t.calories)),
         protein:  String(Math.round(t.protein * 10) / 10),
         carbs:    String(Math.round(t.carbs * 10) / 10),
         fat:      String(Math.round(t.fat * 10) / 10),
-      }));
+        fiber:    t.fiber ? String(Math.round(t.fiber * 10) / 10) : "",
+      };
+      setBaseForm(photoBase);
+      setServingQty("1");
+      setServingUnit("");
+      setForm(f => ({ ...f, name: name || 'AI Photo Estimate', ...photoBase }));
     } catch (e: any) {
       if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
         setPhotoError('Analysis timed out — try a clearer photo or smaller portion.');
@@ -468,6 +511,7 @@ export default function FoodLog() {
                     <div><Label>Protein (g) *</Label><Input type="number" value={libForm.protein} onChange={e => setLibForm(f => ({ ...f, protein: e.target.value }))} placeholder="0" /></div>
                     <div><Label>Carbs (g)</Label><Input type="number" value={libForm.carbs} onChange={e => setLibForm(f => ({ ...f, carbs: e.target.value }))} placeholder="0" /></div>
                     <div><Label>Fat (g)</Label><Input type="number" value={libForm.fat} onChange={e => setLibForm(f => ({ ...f, fat: e.target.value }))} placeholder="0" /></div>
+                    <div><Label>Fiber (g)</Label><Input type="number" value={libForm.fiber} onChange={e => setLibForm(f => ({ ...f, fiber: e.target.value }))} placeholder="0" /></div>
                   </div>
                   <Button onClick={handleLibSubmit} disabled={!libForm.name || !libForm.calories || !libForm.protein || libSaving} className="w-full">
                     {libSaving ? "Saving..." : editItem ? "Save Changes" : "Add to Library"}
@@ -514,7 +558,7 @@ export default function FoodLog() {
           </Button>
 
           {/* Add Food */}
-          <Dialog open={logOpen} onOpenChange={v => { setLogOpen(v); if (!v) { setBarcodeError(null); setLastScanRaw(null); setPhotoPreview(null); setPhotoResult(null); setPhotoError(null); setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "" }); } }}>
+          <Dialog open={logOpen} onOpenChange={v => { setLogOpen(v); if (!v) { setBarcodeError(null); setLastScanRaw(null); setPhotoPreview(null); setPhotoResult(null); setPhotoError(null); setBaseForm(null); setServingQty("1"); setServingUnit(""); setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" }); } }}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="h-4 w-4 mr-1.5" /> Add Food</Button>
             </DialogTrigger>
@@ -659,11 +703,51 @@ export default function FoodLog() {
                   </div>
                 </div>
 
+                {/* Serving size row — shown when a library item or barcode pre-filled the form */}
+                {baseForm && (
+                  <div className="rounded-lg bg-muted/40 border border-border px-3 py-2.5 space-y-2">
+                    <Label className="text-xs text-muted-foreground">Serving size</Label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        {["0.25", "0.5", "0.75", "1", "1.5", "2"].map(q => (
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => { setServingQty(q); applyServing(q, baseForm); }}
+                            className={`px-2 py-1 text-xs rounded border transition-colors ${
+                              servingQty === q
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background border-border hover:bg-muted"
+                            }`}
+                          >
+                            {q === "0.25" ? "¼" : q === "0.5" ? "½" : q === "0.75" ? "¾" : q}
+                          </button>
+                        ))}
+                      </div>
+                      <Input
+                        type="number"
+                        min="0.1"
+                        step="0.25"
+                        value={servingQty}
+                        onChange={e => { setServingQty(e.target.value); applyServing(e.target.value, baseForm); }}
+                        className="w-16 h-7 text-xs text-center"
+                      />
+                      {servingUnit && (
+                        <span className="text-xs text-muted-foreground truncate">{servingUnit}</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {form.calories} kcal · {form.protein}g P · {form.carbs || 0}g C · {form.fat || 0}g F{form.fiber ? ` · ${form.fiber}g fiber` : ""}
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Calories</Label><Input type="number" value={form.calories} onChange={e => setForm(f => ({ ...f, calories: e.target.value }))} placeholder="0" /></div>
                   <div><Label>Protein (g)</Label><Input type="number" value={form.protein} onChange={e => setForm(f => ({ ...f, protein: e.target.value }))} placeholder="0" /></div>
                   <div><Label>Carbs (g)</Label><Input type="number" value={form.carbs} onChange={e => setForm(f => ({ ...f, carbs: e.target.value }))} placeholder="0" /></div>
                   <div><Label>Fat (g)</Label><Input type="number" value={form.fat} onChange={e => setForm(f => ({ ...f, fat: e.target.value }))} placeholder="0" /></div>
+                  <div><Label>Fiber (g)</Label><Input type="number" value={form.fiber} onChange={e => setForm(f => ({ ...f, fiber: e.target.value }))} placeholder="0" /></div>
                 </div>
 
                 <Button onClick={handleLogSubmit} disabled={logSaving} className="w-full">
@@ -788,10 +872,10 @@ export default function FoodLog() {
       </div>
 
       {/* Daily totals */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <Card className={totals.cal > CALORIE_TARGET ? "border-red-300 dark:border-red-800" : "border-primary/20"}>
           <CardContent className="p-3 text-center">
-            <p className="text-2xl font-bold stat-value">{totals.cal}</p>
+            <p className="text-xl font-bold stat-value">{totals.cal}</p>
             <p className="text-xs text-muted-foreground">/ {CALORIE_TARGET} kcal</p>
             <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
               <div className={`h-full rounded-full transition-all ${totals.cal > CALORIE_TARGET ? "bg-red-500" : "bg-blue-500"}`}
@@ -801,11 +885,21 @@ export default function FoodLog() {
         </Card>
         <Card className={totals.prot >= PROTEIN_TARGET ? "border-primary" : "border-border"}>
           <CardContent className="p-3 text-center">
-            <p className="text-2xl font-bold stat-value text-primary">{Math.round(totals.prot)}g</p>
+            <p className="text-xl font-bold stat-value text-primary">{Math.round(totals.prot)}g</p>
             <p className="text-xs text-muted-foreground">/ {PROTEIN_TARGET}g protein</p>
             <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
               <div className="h-full rounded-full bg-primary transition-all"
                 style={{ width: `${Math.min(totals.prot / PROTEIN_TARGET * 100, 100)}%` }} />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border">
+          <CardContent className="p-3 text-center">
+            <p className="text-xl font-bold stat-value text-emerald-600 dark:text-emerald-400">{Math.round(totals.fiber * 10) / 10}g</p>
+            <p className="text-xs text-muted-foreground">fiber today</p>
+            <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full bg-emerald-500 transition-all"
+                style={{ width: `${Math.min(totals.fiber / 25 * 100, 100)}%` }} />
             </div>
           </CardContent>
         </Card>
@@ -842,6 +936,7 @@ export default function FoodLog() {
                       {entry.protein}g prot
                       {entry.carbs != null ? ` · ${entry.carbs}g carb` : ""}
                       {entry.fat != null ? ` · ${entry.fat}g fat` : ""}
+                      {entry.fiber != null && entry.fiber > 0 ? ` · ${entry.fiber}g fiber` : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 ml-3">
