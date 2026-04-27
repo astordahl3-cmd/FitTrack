@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   User, Target, Scale, Flame, Beef, Wheat, Droplets,
   Save, Loader2, Calculator, ChevronDown, ChevronUp,
+  Link2, Link2Off, RefreshCw, CheckCircle2, AlertCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { getProfile, saveProfile } from "@/lib/storage";
+import { supabase } from "@/lib/supabase";
 
 // ── Mifflin-St Jeor BMR ──────────────────────────────────────────────────────
 // weight in lbs → convert to kg; height in inches → convert to cm
@@ -67,11 +69,18 @@ function inchesToFeetStr(inches: number) {
   return `${ft}'${ins}"`;
 }
 
+const SUPABASE_URL = "https://katpbbmhprximuxyjicf.supabase.co";
+
 export default function Profile() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [calcOpen, setCalcOpen] = useState(true);
+
+  // Withings connection state
+  const [withingsConnected, setWithingsConnected] = useState(false);
+  const [withingsLastSync, setWithingsLastSync] = useState<string | null>(null);
+  const [withingsSyncing, setWithingsSyncing] = useState(false);
 
   // Personal info
   const [displayName, setDisplayName] = useState("");
@@ -169,6 +178,59 @@ export default function Profile() {
     setFatPct(val); setProteinPct(np); setCarbPct(Math.max(0, rem - np));
   };
 
+  // ── Withings helpers ────────────────────────────────────────────────────
+  const checkWithingsConnection = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { data } = await supabase
+      .from("withings_tokens")
+      .select("last_synced_at")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    setWithingsConnected(!!data);
+    setWithingsLastSync(data?.last_synced_at ?? null);
+  }, []);
+
+  const handleConnectWithings = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    // Redirect to withings-auth Edge Function which initiates OAuth
+    window.location.href = `${SUPABASE_URL}/functions/v1/withings-auth?user_id=${session.user.id}`;
+  };
+
+  const handleDisconnectWithings = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    await supabase.from("withings_tokens").delete().eq("user_id", session.user.id);
+    setWithingsConnected(false);
+    setWithingsLastSync(null);
+    toast({ title: "Withings disconnected" });
+  };
+
+  const handleSyncWithings = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    setWithingsSyncing(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/withings-sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: session.user.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: `Withings synced ✓`, description: data.message });
+        setWithingsLastSync(new Date().toISOString());
+      } else {
+        toast({ title: "Sync failed", description: data.error, variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Sync error", description: e.message, variant: "destructive" });
+    } finally {
+      setWithingsSyncing(false);
+    }
+  };
+
   // ── Load ──────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     try {
@@ -204,7 +266,25 @@ export default function Profile() {
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    load();
+    checkWithingsConnection();
+
+    // Handle redirect back from Withings OAuth
+    const params = new URLSearchParams(window.location.search);
+    const withingsStatus = params.get("withings");
+    if (withingsStatus === "connected") {
+      toast({ title: "Withings connected ✓", description: "Your scale data is syncing now." });
+      setWithingsConnected(true);
+      // Clean URL
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash.split("?")[0]);
+    } else if (withingsStatus === "error") {
+      const reason = params.get("reason") ?? "unknown";
+      toast({ title: "Withings connection failed", description: reason, variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash.split("?")[0]);
+    }
+  }, [load, checkWithingsConnection]);
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -582,6 +662,72 @@ export default function Profile() {
                   <span key={i} className="text-lg">💧</span>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Withings Integration ── */}
+          <Card>
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Scale className="h-4 w-4 text-primary" /> Withings Scale
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              {withingsConnected ? (
+                <>
+                  <div className="flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                    <span className="font-medium text-green-600 dark:text-green-400">Connected</span>
+                    {withingsLastSync && (
+                      <span className="text-muted-foreground text-xs ml-auto">
+                        Last sync: {new Date(withingsLastSync).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Weight readings from your Withings scale sync automatically into the Weight Tracker.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSyncWithings}
+                      disabled={withingsSyncing}
+                      className="flex-1"
+                    >
+                      {withingsSyncing
+                        ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Syncing...</>
+                        : <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Sync Now</>
+                      }
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDisconnectWithings}
+                      className="text-red-500 hover:text-red-600 hover:border-red-300"
+                    >
+                      <Link2Off className="h-3.5 w-3.5 mr-1.5" />Disconnect
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 text-sm">
+                    <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-muted-foreground">Not connected</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Connect your Withings scale to automatically sync weight readings into FitTrack — no manual entry needed.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="w-full border-primary text-primary hover:bg-primary/10"
+                    onClick={handleConnectWithings}
+                  >
+                    <Link2 className="h-4 w-4 mr-2" />Connect Withings Scale
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
 
