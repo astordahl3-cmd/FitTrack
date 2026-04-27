@@ -23,37 +23,93 @@ function fmt1(n: number) {
 
 // ── mini bar chart ────────────────────────────────────────────────────────────
 
+function formatYLabel(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
+  return String(Math.round(n));
+}
+
 function MiniBar({
-  values, target, color, days,
+  values, target, color, days, unit = "",
 }: {
   values: (number | null)[];
   target: number;
   color: string;
   days: string[];
+  unit?: string;
 }) {
-  const max = Math.max(target * 1.1, ...values.map(v => v ?? 0), 1);
+  const dataMax = Math.max(...values.map(v => v ?? 0), 0);
+  const max = Math.max(target * 1.15, dataMax * 1.1, 1);
+  const BAR_H = 80; // px
+
+  // Y-axis tick values: 0, target, max (deduplicated)
+  const ticks = Array.from(new Set([0, target, Math.round(max)])).sort((a, b) => a - b);
+
   return (
-    <div className="flex items-end gap-1 h-14">
-      {values.map((v, i) => {
-        const h = v ? Math.round((v / max) * 100) : 0;
-        const over = v != null && v > target;
-        return (
-          <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-            <div className="w-full flex flex-col justify-end" style={{ height: "48px" }}>
-              <div
-                className="w-full rounded-sm transition-all"
-                style={{
-                  height: `${h}%`,
-                  backgroundColor: over ? "hsl(0 72% 51%)" : color,
-                  minHeight: v ? "3px" : "0px",
-                  opacity: v ? 1 : 0.15,
-                }}
-              />
-            </div>
-            <span className="text-[9px] text-muted-foreground leading-none">{days[i]}</span>
+    <div className="flex gap-1">
+      {/* Y-axis labels */}
+      <div className="flex flex-col justify-between pb-5" style={{ height: `${BAR_H + 20}px` }}>
+        {[...ticks].reverse().map(t => (
+          <span key={t} className="text-[9px] text-muted-foreground leading-none text-right w-7">
+            {formatYLabel(t)}{unit}
+          </span>
+        ))}
+      </div>
+
+      {/* Chart area */}
+      <div className="flex-1 flex flex-col">
+        {/* Gridlines + bars */}
+        <div className="relative" style={{ height: `${BAR_H}px` }}>
+          {/* Gridlines at each tick */}
+          {ticks.map(t => (
+            <div
+              key={t}
+              className="absolute left-0 right-0 border-t border-dashed"
+              style={{
+                bottom: `${(t / max) * 100}%`,
+                borderColor: t === target ? `${color}55` : "hsl(var(--border))",
+                borderWidth: t === target ? "1.5px" : "1px",
+              }}
+            />
+          ))}
+
+          {/* Bars */}
+          <div className="absolute inset-0 flex items-end gap-1 px-0.5">
+            {values.map((v, i) => {
+              const h = v ? Math.round((v / max) * 100) : 0;
+              const over = v != null && v > target;
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+                  <div
+                    className="w-full rounded-sm transition-all relative group"
+                    style={{
+                      height: `${h}%`,
+                      backgroundColor: over ? "hsl(0 72% 51%)" : color,
+                      minHeight: v ? "3px" : "0px",
+                      opacity: v ? 1 : 0.12,
+                    }}
+                  >
+                    {/* Value tooltip on hover */}
+                    {v != null && v > 0 && (
+                      <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-foreground opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-card border border-border rounded px-1 shadow-sm z-10">
+                        {formatYLabel(v)}{unit}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+
+        {/* Day labels */}
+        <div className="flex gap-1 px-0.5 mt-1">
+          {days.map((d, i) => (
+            <div key={i} className="flex-1 text-center">
+              <span className="text-[9px] text-muted-foreground leading-none">{d}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -300,6 +356,7 @@ export default function WeeklySummary() {
                 target={CALORIE_TARGET}
                 color="hsl(220 70% 55%)"
                 days={days.map(d => d.shortLabel)}
+                unit="kcal"
               />
             </CardContent>
           </Card>
@@ -318,6 +375,7 @@ export default function WeeklySummary() {
                 target={PROTEIN_TARGET}
                 color="hsl(174 88% 25%)"
                 days={days.map(d => d.shortLabel)}
+                unit="g"
               />
             </CardContent>
           </Card>
@@ -336,6 +394,7 @@ export default function WeeklySummary() {
                   target={WATER_GOAL}
                   color="hsl(199 89% 48%)"
                   days={days.map(d => d.shortLabel)}
+                  unit="gl"
                 />
                 <p className="text-xs text-muted-foreground mt-2">Avg {fmt1(avgWater)} / {WATER_GOAL} glasses</p>
               </CardContent>
@@ -353,6 +412,7 @@ export default function WeeklySummary() {
                   target={1}
                   color="hsl(270 70% 60%)"
                   days={days.map(d => d.shortLabel)}
+                  unit=""
                 />
                 <p className="text-xs text-muted-foreground mt-2">{totalWorkouts} session{totalWorkouts !== 1 ? "s" : ""} total</p>
               </CardContent>
