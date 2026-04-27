@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Scale, Utensils, Dumbbell, TrendingDown, Flame, Beef, Plus, Search, Loader2 } from "lucide-react";
+import { Scale, Utensils, Dumbbell, TrendingDown, Flame, Beef, Plus, Search, Loader2, CalendarDays } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -330,12 +330,13 @@ export default function Dashboard() {
       )}
 
       {/* Quick add */}
-      <div className="grid grid-cols-3 gap-3 pb-4">
+      <div className="grid grid-cols-2 gap-3 pb-4">
         <Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5" onClick={() => setLogOpen(true)}>
           <Utensils className="h-4 w-4" /><span className="text-xs">Log Food</span>
         </Button>
         <Link href="/workout"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><Dumbbell className="h-4 w-4" /><span className="text-xs">Log Workout</span></Button></a></Link>
         <Link href="/weight"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><Scale className="h-4 w-4" /><span className="text-xs">Log Weight</span></Button></a></Link>
+        <Link href="/weekly"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><CalendarDays className="h-4 w-4" /><span className="text-xs">Weekly Summary</span></Button></a></Link>
       </div>
     </div>
   );
