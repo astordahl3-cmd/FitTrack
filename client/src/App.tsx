@@ -10,6 +10,7 @@ import FoodLog from "@/pages/FoodLog";
 import WorkoutLog from "@/pages/WorkoutLog";
 import WeightTracker from "@/pages/WeightTracker";
 import Profile from "@/pages/Profile";
+import MyPlan from "@/pages/MyPlan";
 import Auth from "@/pages/Auth";
 import NotFound from "@/pages/not-found";
 import WeeklySummary from "@/pages/WeeklySummary";
@@ -78,6 +79,7 @@ function Layout({ user }: { user: User }) {
             <Route path="/workout" component={WorkoutLog} />
             <Route path="/weight" component={WeightTracker} />
             <Route path="/profile" component={Profile} />
+          <Route path="/plan" component={MyPlan} />
             <Route path="/weekly" component={WeeklySummary} />
             <Route component={NotFound} />
           </Switch>

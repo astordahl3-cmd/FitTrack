@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Utensils, Dumbbell, Scale, X, LogOut, UserCog, CalendarDays } from "lucide-react";
+import { LayoutDashboard, FileText, Utensils, Dumbbell, Scale, X, LogOut, UserCog, CalendarDays } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getProfile } from "@/lib/storage";
 import type { UserProfile } from "@/lib/storage";
@@ -11,6 +11,7 @@ const navItems = [
   { href: "/workout", label: "Workouts", icon: Dumbbell },
   { href: "/weight", label: "Weight", icon: Scale },
   { href: "/weekly", label: "Weekly Summary", icon: CalendarDays },
+  { href: "/plan",    label: "My Plan",  icon: FileText },
   { href: "/profile", label: "Profile", icon: UserCog },
 ];
 
