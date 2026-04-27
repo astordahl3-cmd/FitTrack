@@ -1,0 +1,67 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [source]
+  workflow_dispatch:
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to force-push to main
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          ref: source
+          fetch-depth: 0  # full history so we can push to other branches
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Copy PWA assets into build output
+        run: |
+          cp client/public/manifest.json  dist/public/
+          cp client/public/sw.js          dist/public/
+          cp client/public/icon-192.png   dist/public/
+          cp client/public/icon-512.png   dist/public/
+          cp client/public/favicon.png    dist/public/
+
+      - name: Prepare GitHub Pages files
+        run: |
+          # 404 fallback for hash-router deep links
+          cp dist/public/index.html dist/public/404.html
+          # Prevent Jekyll from ignoring underscore files
+          touch dist/public/.nojekyll
+          # Carry .github/ into the build (Actions workflows + issue templates)
+          mkdir -p dist/public/.github/workflows
+          mkdir -p dist/public/.github/ISSUE_TEMPLATE
+          cp .github/workflows/pages.yml              dist/public/.github/workflows/
+          cp .github/workflows/build-and-deploy.yml   dist/public/.github/workflows/
+          cp .github/workflows/bad-data-triage.yml    dist/public/.github/workflows/
+          cp .github/workflows/bad-data-verify.yml    dist/public/.github/workflows/
+          cp .github/ISSUE_TEMPLATE/*.md              dist/public/.github/ISSUE_TEMPLATE/
+          cp .github/ISSUE_TEMPLATE/config.yml        dist/public/.github/ISSUE_TEMPLATE/
+
+      - name: Force-push build output to main
+        run: |
+          cd dist/public
+          git init
+          git checkout -b main
+          git config user.email "fittrack@deploy.local"
+          git config user.name "FitTrack Deploy"
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git add -A
+          git commit -m "Deploy: ${{ github.sha }} — ${{ github.event.head_commit.message }}"
+          git push --force origin main
