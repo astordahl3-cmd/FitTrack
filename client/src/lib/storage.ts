@@ -241,6 +241,41 @@ export async function saveProfile(updates: Partial<Omit<UserProfile, "id">>): Pr
 
 // ── Daily Summary ─────────────────────────────────────────────────────────────
 
+// ── Plan Documents ──────────────────────────────────────────────────────────
+
+const PLAN_BUCKET = 'plan-documents';
+const PLAN_FILENAME = 'my-plan.pdf';
+
+export async function getPlanDocumentUrl(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+  const path = `${session.user.id}/${PLAN_FILENAME}`;
+  const { data } = await supabase.storage.from(PLAN_BUCKET).createSignedUrl(path, 3600);
+  return data?.signedUrl ?? null;
+}
+
+export async function uploadPlanDocument(file: File): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not signed in');
+  const path = `${session.user.id}/${PLAN_FILENAME}`;
+  const { error } = await supabase.storage.from(PLAN_BUCKET).upload(path, file, {
+    upsert: true,
+    contentType: 'application/pdf',
+  });
+  if (error) throw new Error(error.message);
+  const { data } = await supabase.storage.from(PLAN_BUCKET).createSignedUrl(path, 3600);
+  if (!data?.signedUrl) throw new Error('Could not get signed URL after upload');
+  return data.signedUrl;
+}
+
+export async function deletePlanDocument(): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not signed in');
+  const path = `${session.user.id}/${PLAN_FILENAME}`;
+  const { error } = await supabase.storage.from(PLAN_BUCKET).remove([path]);
+  if (error) throw new Error(error.message);
+}
+
 // ── Water ───────────────────────────────────────────────────────────────────
 
 export interface WaterLog {
