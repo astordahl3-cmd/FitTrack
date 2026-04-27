@@ -169,6 +169,7 @@ export default function FoodLog() {
       setServingQty("1");
       setServingUnit("");
       setBarcodeError(null);
+      setLastScanRaw(null);
       setPhotoResult(null);
       setPhotoPreview(null);
       setPhotoError(null);
@@ -576,6 +577,29 @@ export default function FoodLog() {
                 {barcodeError && (
                   <div className="text-sm text-destructive rounded-lg bg-destructive/10 px-3 py-2">
                     {barcodeError}
+                  </div>
+                )}
+
+                {/* Barcode scan result */}
+                {lastScanRaw && !barcodeLoading && (
+                  <div className="rounded-lg border border-border px-3 py-2.5 space-y-2 bg-muted/20">
+                    <p className="text-xs font-semibold text-foreground truncate">{lastScanRaw.productName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {lastScanRaw.parsedKcal} kcal · {lastScanRaw.parsedProtein}g P · {lastScanRaw.parsedCarbs}g C · {lastScanRaw.parsedFat}g F
+                    </p>
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <Button
+                        className="flex-1"
+                        size="sm"
+                        onClick={handleLogSubmit}
+                        disabled={logSaving || !form.name || !form.calories || !form.protein}
+                      >
+                        {logSaving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving…</> : "Log This Food"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground/70 flex-1">
+                        Or adjust values below
+                      </p>
+                    </div>
                   </div>
                 )}
 
