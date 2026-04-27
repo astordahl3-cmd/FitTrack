@@ -104,6 +104,17 @@ export async function addFood(data: Omit<FoodEntry, "id" | "created_at">): Promi
   return row;
 }
 
+export async function updateFood(id: string, data: Partial<Omit<FoodEntry, "id" | "created_at">>): Promise<FoodEntry> {
+  const { data: row, error } = await supabase
+    .from("food_entries")
+    .update(data)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return row;
+}
+
 export async function deleteFood(id: string): Promise<void> {
   const { error } = await supabase.from("food_entries").delete().eq("id", id);
   if (error) throw error;

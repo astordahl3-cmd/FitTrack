@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
-  getFoodByDate, addFood, deleteFood,
+  getFoodByDate, addFood, updateFood, deleteFood,
   getFoodLibrary, addFoodLibraryItem, updateFoodLibraryItem, deleteFoodLibraryItem,
   getProfile,
 } from "@/lib/storage";
@@ -48,6 +48,7 @@ export default function FoodLog() {
   const PROTEIN_TARGET = profile?.protein_target ?? 210;
 
   const [logOpen, setLogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [barcodeLoading, setBarcodeLoading] = useState(false);
@@ -150,58 +151,103 @@ export default function FoodLog() {
 
   const [logSaving, setLogSaving] = useState(false);
 
+  const resetLogDialog = () => {
+    setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
+    setBaseForm(null);
+    setServingQty("1");
+    setServingUnit("");
+    setBarcodeError(null);
+    setLastScanRaw(null);
+    setPhotoResult(null);
+    setPhotoPreview(null);
+    setPhotoError(null);
+    setEditingEntry(null);
+  };
+
+  const openEditEntry = (entry: FoodEntry) => {
+    setEditingEntry(entry);
+    setForm({
+      meal: entry.meal,
+      name: entry.name,
+      calories: String(entry.calories),
+      protein: String(entry.protein),
+      carbs: entry.carbs != null ? String(entry.carbs) : "",
+      fat: entry.fat != null ? String(entry.fat) : "",
+      fiber: entry.fiber != null ? String(entry.fiber) : "",
+    });
+    setBaseForm(null);
+    setServingQty("1");
+    setServingUnit("");
+    setLastScanRaw(null);
+    setPhotoResult(null);
+    setPhotoPreview(null);
+    setPhotoError(null);
+    setBarcodeError(null);
+    setLogOpen(true);
+  };
+
   const handleLogSubmit = async () => {
     if (!form.name || !form.calories || !form.protein) return;
     setLogSaving(true);
     try {
-      await addFood({
-        date, meal: form.meal, name: form.name,
-        calories: parseInt(form.calories),
-        protein: parseFloat(form.protein),
-        carbs: form.carbs ? parseFloat(form.carbs) : null,
-        fat: form.fat ? parseFloat(form.fat) : null,
-        fiber: form.fiber ? parseFloat(form.fiber) : null,
-      });
-      await loadEntries();
+      if (editingEntry) {
+        // Update existing entry
+        await updateFood(editingEntry.id, {
+          meal: form.meal,
+          name: form.name,
+          calories: parseInt(form.calories),
+          protein: parseFloat(form.protein),
+          carbs: form.carbs ? parseFloat(form.carbs) : null,
+          fat: form.fat ? parseFloat(form.fat) : null,
+          fiber: form.fiber ? parseFloat(form.fiber) : null,
+        });
+        await loadEntries();
+        setLogOpen(false);
+        resetLogDialog();
+        toast({ title: "Entry updated ✓" });
+      } else {
+        // Add new entry
+        await addFood({
+          date, meal: form.meal, name: form.name,
+          calories: parseInt(form.calories),
+          protein: parseFloat(form.protein),
+          carbs: form.carbs ? parseFloat(form.carbs) : null,
+          fat: form.fat ? parseFloat(form.fat) : null,
+          fiber: form.fiber ? parseFloat(form.fiber) : null,
+        });
+        await loadEntries();
 
-      // Auto-save to library when coming from a barcode scan or AI camera photo,
-      // but only if the food isn't already in the library (match by name, case-insensitive)
-      const fromScanOrPhoto = lastScanRaw !== null || photoResult !== null;
-      let savedToLibrary = false;
-      if (fromScanOrPhoto) {
-        const nameNorm = form.name.trim().toLowerCase();
-        const alreadyInLibrary = library.some(l => l.name.trim().toLowerCase() === nameNorm);
-        if (!alreadyInLibrary) {
-          try {
-            await addFoodLibraryItem({
-              name: form.name.trim(),
-              calories: parseInt(form.calories),
-              protein: parseFloat(form.protein),
-              carbs: form.carbs ? parseFloat(form.carbs) : null,
-              fat: form.fat ? parseFloat(form.fat) : null,
-              fiber: form.fiber ? parseFloat(form.fiber) : null,
-              serving_size: null,
-              category: null,
-            });
-            await loadLibrary();
-            savedToLibrary = true;
-          } catch {
-            // Non-fatal — food is logged even if library save fails
+        // Auto-save to library when coming from a barcode scan or AI camera photo,
+        // but only if the food isn't already in the library (match by name, case-insensitive)
+        const fromScanOrPhoto = lastScanRaw !== null || photoResult !== null;
+        let savedToLibrary = false;
+        if (fromScanOrPhoto) {
+          const nameNorm = form.name.trim().toLowerCase();
+          const alreadyInLibrary = library.some(l => l.name.trim().toLowerCase() === nameNorm);
+          if (!alreadyInLibrary) {
+            try {
+              await addFoodLibraryItem({
+                name: form.name.trim(),
+                calories: parseInt(form.calories),
+                protein: parseFloat(form.protein),
+                carbs: form.carbs ? parseFloat(form.carbs) : null,
+                fat: form.fat ? parseFloat(form.fat) : null,
+                fiber: form.fiber ? parseFloat(form.fiber) : null,
+                serving_size: null,
+                category: null,
+              });
+              await loadLibrary();
+              savedToLibrary = true;
+            } catch {
+              // Non-fatal — food is logged even if library save fails
+            }
           }
         }
-      }
 
-      setLogOpen(false);
-      setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
-      setBaseForm(null);
-      setServingQty("1");
-      setServingUnit("");
-      setBarcodeError(null);
-      setLastScanRaw(null);
-      setPhotoResult(null);
-      setPhotoPreview(null);
-      setPhotoError(null);
-      toast({ title: savedToLibrary ? "Food logged & saved to library ✓" : "Food logged ✓" });
+        setLogOpen(false);
+        resetLogDialog();
+        toast({ title: savedToLibrary ? "Food logged & saved to library ✓" : "Food logged ✓" });
+      }
     } catch (e: any) {
       toast({ title: "Failed to save", description: e?.message ?? "Unknown error", variant: "destructive" });
     } finally {
@@ -590,26 +636,26 @@ export default function FoodLog() {
           </Button>
 
           {/* Add Food */}
-          <Dialog open={logOpen} onOpenChange={v => { setLogOpen(v); if (!v) { setBarcodeError(null); setLastScanRaw(null); setPhotoPreview(null); setPhotoResult(null); setPhotoError(null); setBaseForm(null); setServingQty("1"); setServingUnit(""); setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" }); } }}>
+          <Dialog open={logOpen} onOpenChange={v => { setLogOpen(v); if (!v) resetLogDialog(); }}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="h-4 w-4 mr-1.5" /> Add Food</Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
-              <DialogHeader><DialogTitle>Log Food</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editingEntry ? "Edit Entry" : "Log Food"}</DialogTitle></DialogHeader>
               <div className="space-y-4">
-                {barcodeLoading && (
+                {!editingEntry && barcodeLoading && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-lg bg-muted/50 px-3 py-2">
                     <Loader2 className="h-4 w-4 animate-spin" /> Looking up barcode...
                   </div>
                 )}
-                {barcodeError && (
+                {!editingEntry && barcodeError && (
                   <div className="text-sm text-destructive rounded-lg bg-destructive/10 px-3 py-2">
                     {barcodeError}
                   </div>
                 )}
 
                 {/* Barcode scan result */}
-                {lastScanRaw && !barcodeLoading && (
+                {!editingEntry && lastScanRaw && !barcodeLoading && (
                   <div className="rounded-lg border border-border px-3 py-2.5 space-y-2 bg-muted/20">
                     <p className="text-xs font-semibold text-foreground truncate">{lastScanRaw.productName}</p>
                     <p className="text-xs text-muted-foreground">
@@ -632,7 +678,7 @@ export default function FoodLog() {
                 )}
 
                 {/* AI Photo analysis */}
-                {(photoAnalyzing || photoPreview || photoError) && (
+                {!editingEntry && (photoAnalyzing || photoPreview || photoError) && (
                   <div className="rounded-lg border border-border overflow-hidden">
                     {/* Preview strip */}
                     {photoPreview && (
@@ -734,7 +780,7 @@ export default function FoodLog() {
                   </div>
                 )}
 
-                <div className="relative">
+                {!editingEntry && <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input placeholder="Search your food library..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8" />
                   {search && filteredLibrary.length > 0 && (
@@ -752,7 +798,7 @@ export default function FoodLog() {
                       No matches — fill in manually below
                     </div>
                   )}
-                </div>
+                </div>}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -816,7 +862,7 @@ export default function FoodLog() {
                 </div>
 
                 <Button onClick={handleLogSubmit} disabled={logSaving} className="w-full">
-                  {logSaving ? "Saving..." : "Log Food"}
+                  {logSaving ? "Saving..." : editingEntry ? "Save Changes" : "Log Food"}
                 </Button>
 
                 {/* Flag bad data — only shown after a barcode scan */}
@@ -1004,8 +1050,15 @@ export default function FoodLog() {
                       {entry.fiber != null && entry.fiber > 0 ? ` · ${entry.fiber}g fiber` : ""}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 ml-3">
-                    <span className="text-sm font-semibold stat-value">{entry.calories}</span>
+                  <div className="flex items-center gap-1 ml-3">
+                    <span className="text-sm font-semibold stat-value mr-1">{entry.calories}</span>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all"
+                      onClick={() => openEditEntry(entry)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     <Button
                       variant="ghost" size="icon"
                       className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
