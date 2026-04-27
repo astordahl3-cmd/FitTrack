@@ -163,6 +163,34 @@ export default function FoodLog() {
         fiber: form.fiber ? parseFloat(form.fiber) : null,
       });
       await loadEntries();
+
+      // Auto-save to library when coming from a barcode scan or AI camera photo,
+      // but only if the food isn't already in the library (match by name, case-insensitive)
+      const fromScanOrPhoto = lastScanRaw !== null || photoResult !== null;
+      let savedToLibrary = false;
+      if (fromScanOrPhoto) {
+        const nameNorm = form.name.trim().toLowerCase();
+        const alreadyInLibrary = library.some(l => l.name.trim().toLowerCase() === nameNorm);
+        if (!alreadyInLibrary) {
+          try {
+            await addFoodLibraryItem({
+              name: form.name.trim(),
+              calories: parseInt(form.calories),
+              protein: parseFloat(form.protein),
+              carbs: form.carbs ? parseFloat(form.carbs) : null,
+              fat: form.fat ? parseFloat(form.fat) : null,
+              fiber: form.fiber ? parseFloat(form.fiber) : null,
+              serving_size: null,
+              category: null,
+            });
+            await loadLibrary();
+            savedToLibrary = true;
+          } catch {
+            // Non-fatal — food is logged even if library save fails
+          }
+        }
+      }
+
       setLogOpen(false);
       setForm({ meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
       setBaseForm(null);
@@ -173,7 +201,7 @@ export default function FoodLog() {
       setPhotoResult(null);
       setPhotoPreview(null);
       setPhotoError(null);
-      toast({ title: "Food logged ✓" });
+      toast({ title: savedToLibrary ? "Food logged & saved to library ✓" : "Food logged ✓" });
     } catch (e: any) {
       toast({ title: "Failed to save", description: e?.message ?? "Unknown error", variant: "destructive" });
     } finally {
