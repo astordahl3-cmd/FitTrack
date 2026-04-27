@@ -169,6 +169,9 @@ export default function FoodLog() {
       setServingQty("1");
       setServingUnit("");
       setBarcodeError(null);
+      setPhotoResult(null);
+      setPhotoPreview(null);
+      setPhotoError(null);
       toast({ title: "Food logged ✓" });
     } catch (e: any) {
       toast({ title: "Failed to save", description: e?.message ?? "Unknown error", variant: "destructive" });
@@ -661,9 +664,19 @@ export default function FoodLog() {
                           </p>
                         )}
 
-                        <p className="text-xs text-muted-foreground/70">
-                          AI estimates — review and adjust below before logging
-                        </p>
+                        <div className="flex items-center gap-2 pt-1">
+                          <Button
+                            className="flex-1"
+                            size="sm"
+                            onClick={handleLogSubmit}
+                            disabled={logSaving || !form.name || !form.calories || !form.protein}
+                          >
+                            {logSaving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving…</> : "Log This Food"}
+                          </Button>
+                          <p className="text-xs text-muted-foreground/70 flex-1">
+                            Or adjust values below
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
