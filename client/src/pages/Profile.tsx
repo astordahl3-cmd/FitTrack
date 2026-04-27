@@ -95,6 +95,7 @@ export default function Profile() {
   const [proteinPct, setProteinPct] = useState(DEFAULT_PROTEIN_PCT);
   const [carbPct, setCarbPct]       = useState(DEFAULT_CARB_PCT);
   const [fatPct, setFatPct]         = useState(DEFAULT_FAT_PCT);
+  const [waterGoal, setWaterGoal]   = useState(8); // daily glasses target
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const totalHeightIn = parseInt(heightFt || "0") * 12 + parseInt(heightIn || "0");
@@ -191,6 +192,7 @@ export default function Profile() {
         setGoalDate(p.goal_date ?? "");
         const cals = p.calorie_target ?? DEFAULT_CALS;
         setCalTarget(cals); setCalInput(String(cals));
+        if (p.water_goal) setWaterGoal(p.water_goal);
         if (p.protein_target && p.carb_target && p.fat_target) {
           const pp = gramsToPercent(p.protein_target, 4, cals);
           const cp = gramsToPercent(p.carb_target, 4, cals);
@@ -222,6 +224,7 @@ export default function Profile() {
         protein_target:  proteinG,
         carb_target:     carbG,
         fat_target:      fatG,
+        water_goal:      waterGoal,
       });
       toast({ title: "Profile saved ✓" });
     } catch (e: any) {
@@ -544,6 +547,40 @@ export default function Profile() {
                   <span className="w-14 text-right">{proteinG + carbG + fatG}g</span>
                   <span className="w-20 text-right">{calTarget} kcal</span>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Water Goal */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span>💧</span> Daily Water Goal
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Glasses per day (8 oz each)</Label>
+                  <span className="text-lg font-bold text-sky-500">{waterGoal} glasses</span>
+                </div>
+                <Slider
+                  min={8}
+                  max={20}
+                  step={1}
+                  value={[waterGoal]}
+                  onValueChange={([v]) => setWaterGoal(v)}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>8 glasses (64 oz)</span>
+                  <span>{waterGoal * 8} oz / {Math.round(waterGoal * 0.2366)}L per day</span>
+                  <span>20 glasses</span>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {Array.from({ length: waterGoal }).map((_, i) => (
+                  <span key={i} className="text-lg">💧</span>
+                ))}
               </div>
             </CardContent>
           </Card>

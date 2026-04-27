@@ -204,6 +204,7 @@ export interface UserProfile {
   age?: number | null;         // kept for legacy; prefer birthdate
   birthdate?: string | null;   // ISO date string YYYY-MM-DD
   activity_level?: string | null; // 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active'
+  water_goal?: number | null; // daily glasses target (8 oz each), default 8
 }
 
 export async function getProfile(): Promise<UserProfile | null> {
@@ -229,11 +230,41 @@ export async function saveProfile(updates: Partial<Omit<UserProfile, "id">>): Pr
 
 // ── Daily Summary ─────────────────────────────────────────────────────────────
 
+// ── Water ───────────────────────────────────────────────────────────────────
+
+export interface WaterLog {
+  id: string;
+  user_id: string;
+  date: string;
+  glasses: number;
+  created_at: string;
+}
+
+export async function getWaterLog(date: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('water_logs')
+    .select('glasses')
+    .eq('date', date)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.glasses ?? 0;
+}
+
+export async function setWaterLog(date: string, glasses: number): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not signed in');
+  const { error } = await supabase
+    .from('water_logs')
+    .upsert({ user_id: session.user.id, date, glasses }, { onConflict: 'user_id,date' });
+  if (error) throw new Error(error.message);
+}
+
 export async function getDailySummary(date: string) {
-  const [foodEntries, workouts, weightData] = await Promise.all([
+  const [foodEntries, workouts, weightData, water] = await Promise.all([
     getFoodByDate(date),
     getWorkoutsByDate(date),
     getWeightEntries(1),
+    getWaterLog(date),
   ]);
 
   const weight = weightData.find(w => w.date === date) ?? null;
@@ -248,5 +279,5 @@ export async function getDailySummary(date: string) {
     { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
   );
 
-  return { ...totals, foodEntries, workouts, weight };
+  return { ...totals, foodEntries, workouts, weight, water };
 }

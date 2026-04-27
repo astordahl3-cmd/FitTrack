@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { getDailySummary, getWeightEntries, getProfile, addFood, getFoodLibrary, addFoodLibraryItem } from "@/lib/storage";
+import { getDailySummary, getWeightEntries, getProfile, addFood, getFoodLibrary, addFoodLibraryItem, setWaterLog } from "@/lib/storage";
 import type { UserProfile, FoodLibraryItem } from "@/lib/storage";
 
 const MEAL_TIMES = ["6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM", "Noon", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "Other"];
@@ -132,6 +132,18 @@ export default function Dashboard() {
   const PROTEIN_TARGET = profile?.protein_target ?? 210;
   const CARB_TARGET = profile?.carb_target ?? 130;
   const FAT_TARGET = profile?.fat_target ?? 90;
+  const WATER_GOAL = profile?.water_goal ?? 8;
+
+  const handleWater = async (delta: number) => {
+    const current = summary?.water ?? 0;
+    const next = Math.max(0, Math.min(30, current + delta));
+    try {
+      await setWaterLog(today, next);
+      setSummary((s: any) => s ? { ...s, water: next } : s);
+    } catch (e: any) {
+      toast({ title: "Failed to update water", description: e?.message, variant: "destructive" });
+    }
+  };
   const GOAL_START = profile?.start_weight ?? 255;
   const GOAL_END = profile?.goal_weight ?? 235;
   const GOAL_DATE = profile?.goal_date ? new Date(profile.goal_date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Jul 1";
@@ -241,10 +253,11 @@ export default function Dashboard() {
                 <MacroRing value={summary?.protein ?? 0} max={PROTEIN_TARGET} color="hsl(174 88% 25%)" label="Protein" />
                 <MacroRing value={summary?.carbs ?? 0} max={CARB_TARGET} color="hsl(38 92% 50%)" label="Carbs" />
               </div>
-              {/* Row 2: Fat + Fiber */}
+              {/* Row 2: Fat + Fiber + Water */}
               <div className="flex justify-around pb-2">
                 <MacroRing value={summary?.fat ?? 0} max={FAT_TARGET} color="hsl(0 72% 51%)" label="Fat" />
                 <MacroRing value={Math.round((summary?.fiber ?? 0) * 10) / 10} max={25} color="hsl(142 71% 45%)" label="Fiber" />
+                <MacroRing value={summary?.water ?? 0} max={WATER_GOAL} color="hsl(199 89% 48%)" label="Water" unit="gl" />
               </div>
               <div className="flex gap-3 mt-3">
                 <div className={`flex-1 rounded-lg px-3 py-2 text-center ${caloriesLeft >= 0 ? "bg-blue-50 dark:bg-blue-950/30" : "bg-red-50 dark:bg-red-950/30"}`}>
@@ -260,6 +273,36 @@ export default function Dashboard() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Water tracker */}
+      <Card>
+        <CardContent className="px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">💧 Water</p>
+              <p className="text-xs text-muted-foreground">{summary?.water ?? 0} of {WATER_GOAL} glasses (8 oz)</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" className="h-8 w-8 text-lg" onClick={() => handleWater(-1)} disabled={!(summary?.water > 0)}>−</Button>
+              <span className="text-xl font-bold w-6 text-center tabular-nums text-sky-500">{summary?.water ?? 0}</span>
+              <Button variant="outline" size="icon" className="h-8 w-8 text-lg" onClick={() => handleWater(1)} disabled={(summary?.water ?? 0) >= 30}>+</Button>
+            </div>
+          </div>
+          {/* Glass icons */}
+          <div className="flex flex-wrap gap-1 mt-2">
+            {Array.from({ length: WATER_GOAL }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => handleWater(i < (summary?.water ?? 0) ? -(summary?.water ?? 0) + i : i + 1 - (summary?.water ?? 0))}
+                className="text-base leading-none transition-opacity"
+                title={`Set to ${i + 1} glass${i + 1 !== 1 ? 'es' : ''}`}
+              >
+                <span className={(summary?.water ?? 0) > i ? "opacity-100" : "opacity-20"}>💧</span>
+              </button>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
