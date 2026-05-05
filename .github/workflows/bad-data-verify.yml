@@ -1,0 +1,233 @@
+name: Bad Data Auto-Verify
+
+on:
+  schedule:
+    # Run every day at 09:00 UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from Actions tab for immediate re-checks
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Check open bad-data issues against Open Food Facts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const SANE_KCAL_MAX = 2000;
+
+            // ── Helpers ──────────────────────────────────────────────────────
+
+            /** Replicate FitTrack's pick() fallback chain */
+            function pickKcal(n) {
+              const tryKcal = (key) => {
+                const v = parseFloat(String(n[key] ?? ''));
+                return (!isNaN(v) && v > 0) ? v : null;
+              };
+
+              // 1. Prefer explicit kcal fields
+              for (const key of ['energy-kcal_serving', 'energy-kcal_100g', 'energy-kcal']) {
+                const v = tryKcal(key);
+                if (v !== null && v <= SANE_KCAL_MAX) return v;
+              }
+
+              // 2. kJ → kcal conversion (÷ 4.184), capped
+              for (const key of ['energy-kj_serving', 'energy_serving']) {
+                const v = tryKcal(key);
+                if (v !== null) return Math.min(Math.round(v / 4.184), SANE_KCAL_MAX);
+              }
+              for (const key of ['energy-kj_100g', 'energy_100g']) {
+                const v = tryKcal(key);
+                if (v !== null) return Math.min(Math.round(v / 4.184), SANE_KCAL_MAX);
+              }
+
+              return null; // completely absent
+            }
+
+            /** Fetch current OFF data for a barcode */
+            async function fetchOFF(barcode) {
+              const url = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`;
+              try {
+                const res = await fetch(url, {
+                  headers: { 'User-Agent': 'FitTrack/1.0 (github.com/astordahl3-cmd/FitTrack)' },
+                  signal: AbortSignal.timeout(10000),
+                });
+                const json = await res.json();
+                if (json.status !== 1 || !json.product) return { found: false };
+                const n = json.product.nutriments ?? {};
+                const kcal = pickKcal(n);
+                const revisions = json.product.rev ?? null;
+                return { found: true, kcal, revisions };
+              } catch {
+                return { found: false, error: true };
+              }
+            }
+
+            /** Extract barcode from issue body table, fallback to title */
+            function extractBarcode(body, title) {
+              const bodyMatch = (body ?? '').match(/\*\*Barcode\*\*\s*\|\s*([0-9]{6,14})/);
+              if (bodyMatch) return bodyMatch[1].trim();
+              const titleMatch = (title ?? '').match(/\(([0-9]{6,14})\)\s*$/);
+              return titleMatch ? titleMatch[1].trim() : null;
+            }
+
+            /** Extract the originally-filed kcal from the issue body */
+            function extractFiledKcal(body) {
+              // Matches "| Calories | 16500 kcal |" or "| Calories | 16,500 kcal |"
+              const m = (body ?? '').match(/\|\s*Calories\s*\|\s*([\d,]+)\s*kcal/i);
+              if (!m) return null;
+              return parseInt(m[1].replace(/,/g, ''), 10);
+            }
+
+            // ── Main ─────────────────────────────────────────────────────────
+
+            // Fetch all open issues with the bad-data label
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'bad-data',
+              per_page: 100,
+            });
+
+            console.log(`Found ${issues.length} open bad-data issue(s) to check.`);
+
+            for (const issue of issues) {
+              const { number, title, body } = issue;
+              console.log(`\nChecking issue #${number}: ${title}`);
+
+              const barcode = extractBarcode(body, title);
+              if (!barcode) {
+                console.log(`  → No barcode found, skipping.`);
+                continue;
+              }
+
+              const filedKcal = extractFiledKcal(body);
+              console.log(`  Barcode: ${barcode} | Filed kcal: ${filedKcal ?? 'unknown'}`);
+
+              const off = await fetchOFF(barcode);
+
+              if (off.error) {
+                console.log(`  → OFF API timeout/error, skipping this run.`);
+                continue;
+              }
+
+              if (!off.found) {
+                // Product removed from OFF — unlikely to be fixed, note it
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  body: [
+                    '### 🔍 Auto-Verify Check',
+                    '',
+                    `Barcode \`${barcode}\` is no longer found in the Open Food Facts database.`,
+                    'The product may have been removed or merged.',
+                    '',
+                    `[Search Open Food Facts](https://world.openfoodfacts.org/cgi/search.pl?search_terms=${barcode}) for more info.`,
+                    '',
+                    '_This check runs daily. This issue will remain open until manually resolved._',
+                    '_Automated check by FitTrack bad-data-verify workflow._',
+                  ].join('\n'),
+                });
+                // Apply a label so it's easy to filter
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  labels: ['needs-review'],
+                }).catch(() => {}); // label may not exist yet — non-fatal
+                continue;
+              }
+
+              const currentKcal = off.kcal;
+              console.log(`  Current OFF kcal: ${currentKcal ?? 'null'}`);
+
+              // ── Decision logic ───────────────────────────────────────────
+              const kcalChanged   = filedKcal !== null && currentKcal !== null && currentKcal !== filedKcal;
+              const kcalNowSane   = currentKcal !== null && currentKcal <= SANE_KCAL_MAX;
+              const wasInsane     = filedKcal !== null && filedKcal > SANE_KCAL_MAX;
+              const fixed         = kcalChanged && kcalNowSane;
+              const stillBad      = currentKcal !== null && !kcalNowSane;
+
+              if (fixed) {
+                const offProductUrl = `https://world.openfoodfacts.org/product/${barcode}`;
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  body: [
+                    '### ✅ Data Fixed — Auto-Closing',
+                    '',
+                    `The Open Food Facts data for barcode \`${barcode}\` has been corrected.`,
+                    '',
+                    `| | Before | After |`,
+                    `|---|---|---|`,
+                    `| **Calories** | ${filedKcal != null ? filedKcal + ' kcal' : 'unknown'} | **${currentKcal} kcal** |`,
+                    '',
+                    `> FitTrack will pick up the corrected value automatically on the next scan — no app update needed.`,
+                    '',
+                    `[View updated product page](${offProductUrl})`,
+                    '',
+                    '---',
+                    '_Verified and auto-closed by FitTrack bad-data-verify workflow._',
+                  ].join('\n'),
+                });
+
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  state: 'closed',
+                  state_reason: 'completed',
+                });
+
+                console.log(`  → FIXED. Closed issue #${number}.`);
+
+              } else if (stillBad) {
+                console.log(`  → Still bad (${currentKcal} kcal). Leaving open.`);
+                // Don't spam — only comment if this is the first re-check
+                // (i.e. no prior "Auto-Verify" comment exists)
+                const comments = await github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: number,
+                  per_page: 50,
+                });
+                const alreadyCommented = comments.data.some(c =>
+                  c.body.includes('Auto-Verify Check') || c.body.includes('Auto-Closing')
+                );
+                if (!alreadyCommented) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: number,
+                    body: [
+                      '### 🔍 Auto-Verify Check',
+                      '',
+                      `Barcode \`${barcode}\` was checked against Open Food Facts.`,
+                      `The calorie value is still **${currentKcal} kcal**${wasInsane ? ` (filed value: ${filedKcal} kcal)` : ''} — data not yet corrected.`,
+                      '',
+                      `To fix it: [Edit on Open Food Facts](https://world.openfoodfacts.org/cgi/product.pl?type=edit&code=${barcode})`,
+                      '',
+                      '_This issue will be auto-closed once the OFF value is updated to a sane value (≤ 2,000 kcal). Checks run daily._',
+                      '_Automated check by FitTrack bad-data-verify workflow._',
+                    ].join('\n'),
+                  });
+                }
+
+              } else if (currentKcal === null) {
+                console.log(`  → OFF has no calorie data at all. Leaving open.`);
+              } else {
+                // kcal present, sane, but didn't change from filed value —
+                // the original report may have been a different field (protein, etc.)
+                // or filed kcal was already sane. Leave open, no comment.
+                console.log(`  → Kcal is ${currentKcal} (sane), no change detected from filed value. Leaving open.`);
+              }
+            }
+
+            console.log('\nDone.');
