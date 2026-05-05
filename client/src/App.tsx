@@ -14,6 +14,7 @@ import MyPlan from "@/pages/MyPlan";
 import Auth from "@/pages/Auth";
 import NotFound from "@/pages/not-found";
 import WeeklySummary from "@/pages/WeeklySummary";
+import WorkoutDetail from "@/pages/WorkoutDetail";
 import { Menu, LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
@@ -81,6 +82,7 @@ function Layout({ user }: { user: User }) {
             <Route path="/profile" component={Profile} />
           <Route path="/plan" component={MyPlan} />
             <Route path="/weekly" component={WeeklySummary} />
+            <Route path="/workout/detail" component={WorkoutDetail} />
             <Route component={NotFound} />
           </Switch>
         </main>
