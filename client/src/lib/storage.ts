@@ -145,9 +145,15 @@ export async function getRecentWorkouts(limit = 30): Promise<WorkoutSession[]> {
 export async function addWorkout(data: Omit<WorkoutSession, "id" | "created_at">): Promise<WorkoutSession> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not signed in — please log out and back in.");
+  // duration is NOT NULL in schema — default to 0 if not provided
+  const payload = {
+    ...data,
+    duration: data.duration ?? 0,
+    user_id: session.user.id,
+  };
   const { data: row, error } = await supabase
     .from("workout_sessions")
-    .insert({ ...data, user_id: session.user.id })
+    .insert(payload)
     .select()
     .single();
   if (error) throw new Error(error.message);

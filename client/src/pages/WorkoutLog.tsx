@@ -204,7 +204,7 @@ export default function WorkoutLog() {
       await addWorkout({
         date: form.date,
         type: form.type,
-        duration: parseInt(form.duration),
+        duration: parseInt(form.duration) || 0,
         calories_burned: form.caloriesBurned ? parseInt(form.caloriesBurned) : null,
         exercises: exercises,
         notes: form.notes || null,
