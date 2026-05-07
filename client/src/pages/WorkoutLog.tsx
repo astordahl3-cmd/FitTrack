@@ -54,14 +54,21 @@ const WORKOUT_TEMPLATES = [
 
 function WorkoutCard({ session, onDelete }: { session: WorkoutSession; onDelete: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
-  const raw: any[] = Array.isArray(session.exercises) ? session.exercises : [];
+
+  // Safely coerce exercises — Supabase may return null, a string[], or an object[]
+  const rawExercises = session.exercises;
+  const raw: any[] = Array.isArray(rawExercises)
+    ? rawExercises.filter((e: any) => e != null)
+    : [];
 
   // Detect detailed (object) vs quick-log (string) entries
-  const isDetailed = raw.some(e => e && typeof e === "object" && e.kind);
-  const lifts = isDetailed ? raw.filter(e => e.kind === "lift") : [];
-  const cardios = isDetailed ? raw.filter(e => e.kind === "cardio") : [];
-  const saunaEntry = isDetailed ? raw.find(e => e.kind === "sauna") : null;
-  const stringExercises: string[] = isDetailed ? [] : raw.filter(e => typeof e === "string");
+  const isDetailed = raw.some(e => typeof e === "object" && e !== null && "kind" in e);
+  const lifts = isDetailed ? raw.filter(e => e?.kind === "lift") : [];
+  const cardios = isDetailed ? raw.filter(e => e?.kind === "cardio") : [];
+  const saunaEntry = isDetailed ? (raw.find(e => e?.kind === "sauna") ?? null) : null;
+  const stringExercises: string[] = isDetailed
+    ? []
+    : raw.filter(e => typeof e === "string" && !e.startsWith("["));
 
   return (
     <Card>

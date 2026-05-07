@@ -353,7 +353,7 @@ export default function WorkoutDetail() {
 
   const load = useCallback(async () => {
     const data = await getRecentWorkouts(30);
-    setWorkouts(data.filter(w => Array.isArray(w.exercises) && w.exercises.some((e: any) => e.kind)));
+    setWorkouts(data.filter(w => Array.isArray(w.exercises) && w.exercises.some((e: any) => e && typeof e === "object" && e.kind)));
   }, []);
 
   useEffect(() => { load(); }, [load]);
