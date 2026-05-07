@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { format, parseISO } from "date-fns";
-import { Plus, Trash2, Dumbbell, Clock, Flame } from "lucide-react";
+import { Plus, Trash2, Dumbbell, Clock, Flame, Activity, Thermometer, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,113 @@ const WORKOUT_TEMPLATES = [
     exercises: [],
   },
 ];
+
+// ── WorkoutCard — renders both quick-log (string[]) and detailed (object[]) sessions ──
+
+function WorkoutCard({ session, onDelete }: { session: WorkoutSession; onDelete: (id: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const raw: any[] = Array.isArray(session.exercises) ? session.exercises : [];
+
+  // Detect detailed (object) vs quick-log (string) entries
+  const isDetailed = raw.some(e => e && typeof e === "object" && e.kind);
+  const lifts = isDetailed ? raw.filter(e => e.kind === "lift") : [];
+  const cardios = isDetailed ? raw.filter(e => e.kind === "cardio") : [];
+  const saunaEntry = isDetailed ? raw.find(e => e.kind === "sauna") : null;
+  const stringExercises: string[] = isDetailed ? [] : raw.filter(e => typeof e === "string");
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-semibold">{session.type}</span>
+
+            {/* Meta row */}
+            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 mb-2 flex-wrap">
+              {session.duration != null && (
+                <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{session.duration} min</span>
+              )}
+              {session.calories_burned != null && (
+                <span className="flex items-center gap-1"><Flame className="h-3 w-3" />~{session.calories_burned} kcal</span>
+              )}
+              {isDetailed && lifts.length > 0 && (
+                <span className="flex items-center gap-1"><Dumbbell className="h-3 w-3" />{lifts.length} lift{lifts.length !== 1 ? "s" : ""}</span>
+              )}
+              {isDetailed && cardios.length > 0 && (
+                <span className="flex items-center gap-1"><Activity className="h-3 w-3 text-sky-500" />{cardios.map((c: any) => c.type).join(", ")}</span>
+              )}
+              {saunaEntry && (
+                <span className="flex items-center gap-1"><Thermometer className="h-3 w-3 text-orange-500" /><span className="text-orange-500">Sauna {saunaEntry.duration}min</span></span>
+              )}
+            </div>
+
+            {/* Quick-log string chips */}
+            {stringExercises.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-1">
+                {stringExercises.slice(0, 4).map((ex, i) => (
+                  <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded-full">{ex}</span>
+                ))}
+                {stringExercises.length > 4 && (
+                  <span className="text-xs text-muted-foreground">+{stringExercises.length - 4} more</span>
+                )}
+              </div>
+            )}
+
+            {/* Detailed expand/collapse */}
+            {isDetailed && (lifts.length > 0 || cardios.length > 0) && (
+              <button
+                className="text-xs text-primary flex items-center gap-0.5 mb-1"
+                onClick={() => setExpanded(v => !v)}
+              >
+                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {expanded ? "Hide details" : "Show details"}
+              </button>
+            )}
+
+            {expanded && (
+              <div className="space-y-2 mt-1.5">
+                {lifts.map((ex: any, i: number) => (
+                  <div key={i} className="rounded-lg bg-muted/40 p-2.5">
+                    <p className="text-xs font-semibold mb-1 flex items-center gap-1.5">
+                      <Dumbbell className="h-3 w-3 text-primary" />{ex.name}
+                    </p>
+                    {ex.sets?.map((s: any, si: number) => (
+                      <div key={si} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="w-4 text-center font-medium text-foreground">{si + 1}</span>
+                        <span>{s.weight} lbs × {s.reps} reps</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {cardios.map((ex: any, i: number) => (
+                  <div key={i} className="rounded-lg bg-sky-500/5 border border-sky-200 dark:border-sky-800 p-2.5">
+                    <p className="text-xs font-semibold flex items-center gap-1.5 mb-0.5">
+                      <Activity className="h-3 w-3 text-sky-500" />{ex.type}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {ex.duration}min · {ex.intensity} intensity
+                      {ex.notes ? ` · ${ex.notes}` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {session.notes && <p className="text-xs text-muted-foreground italic mt-1">{session.notes}</p>}
+          </div>
+
+          <Button
+            variant="ghost" size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0 ml-2"
+            onClick={() => onDelete(session.id)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function WorkoutLog() {
   const { toast } = useToast();
@@ -242,46 +349,9 @@ export default function WorkoutLog() {
                 {date === format(new Date(), "yyyy-MM-dd") ? "Today" : format(parseISO(date), "EEE, MMM d")}
               </p>
               <div className="space-y-2">
-                {sessions.map(session => {
-                  const exList: string[] = Array.isArray(session.exercises) ? session.exercises : [];
-                  return (
-                    <Card key={session.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-sm font-semibold">{session.type}</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
-                              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{session.duration} min</span>
-                              {session.calories_burned != null && (
-                                <span className="flex items-center gap-1"><Flame className="h-3 w-3" />~{session.calories_burned} kcal</span>
-                              )}
-                            </div>
-                            {exList.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {exList.slice(0, 4).map((ex, i) => (
-                                  <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded-full">{ex}</span>
-                                ))}
-                                {exList.length > 4 && (
-                                  <span className="text-xs text-muted-foreground">+{exList.length - 4} more</span>
-                                )}
-                              </div>
-                            )}
-                            {session.notes && <p className="text-xs text-muted-foreground mt-1.5 italic">{session.notes}</p>}
-                          </div>
-                          <Button
-                            variant="ghost" size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                            onClick={() => handleDelete(session.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                {sessions.map(session => (
+                  <WorkoutCard key={session.id} session={session} onDelete={handleDelete} />
+                ))}
               </div>
             </div>
           ))

@@ -28,12 +28,18 @@ interface LiftExercise {
 
 interface CardioExercise {
   kind: "cardio";
-  type: string;     // e.g. Treadmill, Bike, Elliptical
-  duration: string; // minutes
-  intensity: string; // e.g. Low / Moderate / High, or speed/incline
+  type: string;
+  duration: string;
+  intensity: string;
+  notes?: string;
 }
 
-type Exercise = LiftExercise | CardioExercise;
+interface SaunaEntry {
+  kind: "sauna";
+  duration: string;
+}
+
+type Exercise = LiftExercise | CardioExercise | SaunaEntry;
 
 interface DetailedWorkout {
   exercises: Exercise[];
@@ -264,10 +270,12 @@ function SaunaBlock({
 
 function SessionDetailView({ session }: { session: WorkoutSession }) {
   const [expanded, setExpanded] = useState(false);
-  const exData: Exercise[] = Array.isArray(session.exercises) ? session.exercises : [];
-  const saunaData = (session as any).sauna;
+  const exData: Exercise[] = Array.isArray(session.exercises)
+    ? session.exercises.filter((e: any) => e && typeof e === "object" && e.kind)
+    : [];
   const lifts = exData.filter((e): e is LiftExercise => e.kind === "lift");
   const cardios = exData.filter((e): e is CardioExercise => e.kind === "cardio");
+  const saunaEntry = exData.find((e): e is SaunaEntry => e.kind === "sauna");
 
   return (
     <div>
@@ -277,7 +285,7 @@ function SessionDetailView({ session }: { session: WorkoutSession }) {
         {session.calories_burned && <span className="flex items-center gap-1"><Flame className="h-3 w-3" />~{session.calories_burned} kcal</span>}
         {lifts.length > 0 && <span className="flex items-center gap-1"><Dumbbell className="h-3 w-3" />{lifts.length} exercise{lifts.length !== 1 ? "s" : ""}</span>}
         {cardios.length > 0 && <span className="flex items-center gap-1"><Activity className="h-3 w-3" />{cardios.map(c => c.type).join(", ")}</span>}
-        {saunaData?.sauna && <span className="flex items-center gap-1"><Thermometer className="h-3 w-3 text-orange-500" /><span className="text-orange-500">Sauna {saunaData.duration}min</span></span>}
+        {saunaEntry && <span className="flex items-center gap-1"><Thermometer className="h-3 w-3 text-orange-500" /><span className="text-orange-500">Sauna {saunaEntry.duration}min</span></span>}
       </div>
 
       {exData.length > 0 && (
@@ -383,20 +391,24 @@ export default function WorkoutDetail() {
       if (sauna) parts.push("Sauna");
       const type = parts.join(" + ") || "Workout";
 
-      // Clean exercises (drop empty lifts)
-      const cleanExercises = exercises.filter(e =>
-        e.kind === "cardio" ? e.duration !== "" : e.name.trim() !== ""
-      );
+      // Build the full exercises array — lifts + cardio (drop empties) + sauna as a structured entry
+      const cleanExercises: Exercise[] = [
+        ...exercises.filter(e =>
+          e.kind === "cardio" ? e.duration !== "" : (e as LiftExercise).name.trim() !== ""
+        ),
+        ...(sauna ? [{ kind: "sauna" as const, duration: saunaDuration }] : []),
+      ];
+
+      const finalDuration = duration ? parseInt(duration) : autoMinutes || null;
 
       await addWorkout({
         date,
         type,
-        duration: duration ? parseInt(duration) : autoMinutes || null,
+        duration: finalDuration,
         calories_burned: caloriesBurned ? parseInt(caloriesBurned) : null,
         exercises: cleanExercises,
         notes: notes || null,
-        ...(sauna ? { sauna: { sauna: true, duration: saunaDuration } } : {}),
-      } as any);
+      });
 
       await load();
       toast({ title: "Workout saved ✓" });
