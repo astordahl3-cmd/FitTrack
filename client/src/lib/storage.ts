@@ -129,7 +129,14 @@ export async function getWorkoutsByDate(date: string): Promise<WorkoutSession[]>
     .eq("date", date)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map(parseWorkoutExercises);
+}
+
+function parseWorkoutExercises(w: any): WorkoutSession {
+  if (typeof w.exercises === "string") {
+    try { w.exercises = JSON.parse(w.exercises); } catch { w.exercises = []; }
+  }
+  return w;
 }
 
 export async function getRecentWorkouts(limit = 30): Promise<WorkoutSession[]> {
@@ -139,16 +146,21 @@ export async function getRecentWorkouts(limit = 30): Promise<WorkoutSession[]> {
     .order("date", { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map(parseWorkoutExercises);
 }
 
 export async function addWorkout(data: Omit<WorkoutSession, "id" | "created_at">): Promise<WorkoutSession> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not signed in — please log out and back in.");
   // duration is NOT NULL in schema — default to 0 if not provided
+  // exercises column is text in schema — serialize array to JSON string if needed
+  const exercises = data.exercises;
   const payload = {
     ...data,
     duration: data.duration ?? 0,
+    exercises: Array.isArray(exercises)
+      ? JSON.stringify(exercises)
+      : (exercises ?? "[]"),
     user_id: session.user.id,
   };
   const { data: row, error } = await supabase
