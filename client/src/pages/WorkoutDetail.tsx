@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import {
   Plus, Trash2, Dumbbell, Timer, Flame, ChevronDown, ChevronUp,
   Thermometer, Activity, Check, Pencil,
@@ -352,8 +352,16 @@ export default function WorkoutDetail() {
   const [saunaDuration, setSaunaDuration] = useState("20");
 
   const load = useCallback(async () => {
-    const data = await getRecentWorkouts(30);
-    setWorkouts(data.filter(w => Array.isArray(w.exercises) && w.exercises.some((e: any) => e && typeof e === "object" && e.kind)));
+    try {
+      const data = await getRecentWorkouts(30);
+      setWorkouts(
+        data.filter(w =>
+          w.date && isValid(parseISO(w.date)) &&
+          Array.isArray(w.exercises) &&
+          w.exercises.some((e: any) => e && typeof e === "object" && e.kind)
+        )
+      );
+    } catch { setWorkouts([]); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -537,7 +545,7 @@ export default function WorkoutDetail() {
             .map(([d, sessions]) => (
               <div key={d}>
                 <p className="text-xs font-semibold text-muted-foreground mb-2">
-                  {d === format(new Date(), "yyyy-MM-dd") ? "Today" : format(parseISO(d), "EEE, MMM d")}
+                  {d === format(new Date(), "yyyy-MM-dd") ? "Today" : (() => { try { return format(parseISO(d), "EEE, MMM d"); } catch { return d; } })()}
                 </p>
                 <div className="space-y-2">
                   {sessions.map(session => (

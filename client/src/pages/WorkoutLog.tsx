@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { Plus, Trash2, Dumbbell, Clock, Flame, Activity, Thermometer, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ function WorkoutCard({ session, onDelete }: { session: WorkoutSession; onDelete:
 
             {/* Meta row */}
             <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 mb-2 flex-wrap">
-              {session.duration != null && (
+              {session.duration != null && session.duration > 0 && (
                 <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{session.duration} min</span>
               )}
               {session.calories_burned != null && (
@@ -181,8 +181,14 @@ export default function WorkoutLog() {
   });
 
   const load = useCallback(async () => {
-    const data = await getRecentWorkouts(30);
-    setWorkouts(data);
+    try {
+      const data = await getRecentWorkouts(30);
+      // Filter out any rows with missing/invalid dates to prevent render crashes
+      setWorkouts(data.filter(w => w.date && isValid(parseISO(w.date))));
+    } catch (e) {
+      // Non-fatal — just show empty list rather than crashing
+      setWorkouts([]);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -353,7 +359,7 @@ export default function WorkoutLog() {
           .map(([date, sessions]) => (
             <div key={date}>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                {date === format(new Date(), "yyyy-MM-dd") ? "Today" : format(parseISO(date), "EEE, MMM d")}
+                {date === format(new Date(), "yyyy-MM-dd") ? "Today" : (() => { try { return format(parseISO(date), "EEE, MMM d"); } catch { return date; } })()}
               </p>
               <div className="space-y-2">
                 {sessions.map(session => (
