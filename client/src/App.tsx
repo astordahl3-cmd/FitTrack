@@ -11,6 +11,7 @@ import WorkoutLog from "@/pages/WorkoutLog";
 import WeightTracker from "@/pages/WeightTracker";
 import Profile from "@/pages/Profile";
 import MyPlan from "@/pages/MyPlan";
+import Mindfulness from "@/pages/Mindfulness";
 import Auth from "@/pages/Auth";
 import NotFound from "@/pages/not-found";
 import WeeklySummary from "@/pages/WeeklySummary";
@@ -79,6 +80,7 @@ function Layout({ user }: { user: User }) {
             <Route path="/food" component={FoodLog} />
             <Route path="/workout" component={WorkoutLog} />
             <Route path="/weight" component={WeightTracker} />
+            <Route path="/mindfulness" component={Mindfulness} />
             <Route path="/profile" component={Profile} />
           <Route path="/plan" component={MyPlan} />
             <Route path="/weekly" component={WeeklySummary} />

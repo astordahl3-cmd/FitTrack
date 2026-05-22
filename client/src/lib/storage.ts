@@ -216,6 +216,56 @@ export async function deleteFoodLibraryItem(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ── Mindfulness ─────────────────────────────────────────────────────────────
+
+export type MindfulnessCategory = "language" | "bible" | "mental_health";
+
+export interface MindfulnessSession {
+  id: string;
+  date: string;
+  category: MindfulnessCategory;
+  duration: number; // minutes
+  notes?: string | null;
+  created_at: string;
+}
+
+export async function getMindfulnessByDate(date: string): Promise<MindfulnessSession[]> {
+  const { data, error } = await supabase
+    .from("mindfulness_sessions")
+    .select("*")
+    .eq("date", date)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getRecentMindfulness(limit = 60): Promise<MindfulnessSession[]> {
+  const { data, error } = await supabase
+    .from("mindfulness_sessions")
+    .select("*")
+    .order("date", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addMindfulness(data: Omit<MindfulnessSession, "id" | "created_at">): Promise<MindfulnessSession> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not signed in — please log out and back in.");
+  const { data: row, error } = await supabase
+    .from("mindfulness_sessions")
+    .insert({ ...data, user_id: session.user.id })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return row;
+}
+
+export async function deleteMindfulness(id: string): Promise<void> {
+  const { error } = await supabase.from("mindfulness_sessions").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ── User Profile ─────────────────────────────────────────────────────────────
 
 export interface UserProfile {
@@ -324,11 +374,12 @@ export async function setWaterLog(date: string, glasses: number): Promise<void> 
 }
 
 export async function getDailySummary(date: string) {
-  const [foodEntries, workouts, weightData, water] = await Promise.all([
+  const [foodEntries, workouts, weightData, water, mindfulness] = await Promise.all([
     getFoodByDate(date),
     getWorkoutsByDate(date),
     getWeightEntries(1),
     getWaterLog(date),
+    getMindfulnessByDate(date),
   ]);
 
   const weight = weightData.find(w => w.date === date) ?? null;
@@ -343,5 +394,5 @@ export async function getDailySummary(date: string) {
     { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
   );
 
-  return { ...totals, foodEntries, workouts, weight, water };
+  return { ...totals, foodEntries, workouts, weight, water, mindfulness };
 }

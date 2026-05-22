@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { Scale, Utensils, Dumbbell, TrendingDown, Flame, Beef, Plus, Search, Loader2, CalendarDays } from "lucide-react";
+import { Scale, Utensils, Dumbbell, TrendingDown, Flame, Beef, Plus, Search, Loader2, CalendarDays, Brain, BookOpen, Languages, HeartPulse } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getDailySummary, getWeightEntries, getProfile, addFood, getFoodLibrary, addFoodLibraryItem, setWaterLog } from "@/lib/storage";
-import type { UserProfile, FoodLibraryItem } from "@/lib/storage";
+import type { UserProfile, FoodLibraryItem, MindfulnessSession } from "@/lib/storage";
 
 const MEAL_TIMES = ["6 AM", "7 AM", "8 AM", "9 AM", "10 AM", "11 AM", "Noon", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM", "Other"];
 const EMPTY_FORM = { meal: "Noon", name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" };
@@ -314,6 +314,51 @@ export default function Dashboard() {
         <StatCard icon={Beef} label="Protein Today" value={`${Math.round(summary?.protein ?? 0)}g`} sub={`Target: ${PROTEIN_TARGET}g`} color="bg-primary/10 text-primary" href="/food" />
       </div>
 
+      {/* Mindfulness today */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+            <Brain className="h-4 w-4 text-primary" /> Mindfulness Today
+          </CardTitle>
+          <Link href="/mindfulness"><a className="text-xs text-primary font-medium">Log time →</a></Link>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          {(() => {
+            const items: MindfulnessSession[] = summary?.mindfulness ?? [];
+            const byCat = items.reduce<Record<string, number>>((acc, s) => {
+              acc[s.category] = (acc[s.category] ?? 0) + s.duration;
+              return acc;
+            }, {});
+            const total = items.reduce((a, s) => a + s.duration, 0);
+            const cats = [
+              { key: "language",      label: "Language", icon: Languages,  color: "text-sky-600",   bg: "bg-sky-100 dark:bg-sky-900/30" },
+              { key: "bible",         label: "Bible",    icon: BookOpen,   color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/30" },
+              { key: "mental_health", label: "Mental",   icon: HeartPulse, color: "text-rose-600",  bg: "bg-rose-100 dark:bg-rose-900/30" },
+            ];
+            return (
+              <>
+                <div className="flex items-baseline justify-between mb-2">
+                  <p className="text-xs text-muted-foreground">Total time spent today</p>
+                  <p className="text-lg font-bold">{total} <span className="text-xs font-normal text-muted-foreground">min</span></p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {cats.map(c => {
+                    const Icon = c.icon;
+                    return (
+                      <div key={c.key} className={`rounded-lg ${c.bg} px-2 py-2 text-center`}>
+                        <Icon className={`h-4 w-4 mx-auto ${c.color}`} />
+                        <p className="text-base font-bold mt-1">{byCat[c.key] ?? 0}</p>
+                        <p className="text-[10px] text-muted-foreground">{c.label}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
       {/* Today's meals */}
       {summary?.foodEntries?.length > 0 && (
         <Card>
@@ -336,6 +381,7 @@ export default function Dashboard() {
         </Button>
         <Link href="/workout"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><Dumbbell className="h-4 w-4" /><span className="text-xs">Log Workout</span></Button></a></Link>
         <Link href="/weight"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><Scale className="h-4 w-4" /><span className="text-xs">Log Weight</span></Button></a></Link>
+        <Link href="/mindfulness"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><Brain className="h-4 w-4" /><span className="text-xs">Mindfulness</span></Button></a></Link>
         <Link href="/weekly"><a><Button variant="outline" className="w-full h-auto py-3 flex-col gap-1.5"><CalendarDays className="h-4 w-4" /><span className="text-xs">Weekly Summary</span></Button></a></Link>
       </div>
     </div>

@@ -34,6 +34,15 @@ export const workoutSessions = sqliteTable("workout_sessions", {
   notes: text("notes"),
 });
 
+// Mindfulness sessions — language study, bible study, mental health time
+export const mindfulnessSessions = sqliteTable("mindfulness_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(),
+  category: text("category").notNull(), // "language" | "bible" | "mental_health"
+  duration: integer("duration").notNull(), // minutes
+  notes: text("notes"),
+});
+
 // Custom food items (quick-add library)
 export const foodLibrary = sqliteTable("food_library", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -49,6 +58,7 @@ export const foodLibrary = sqliteTable("food_library", {
 export const insertWeightSchema = createInsertSchema(weightEntries).omit({ id: true });
 export const insertFoodSchema = createInsertSchema(foodEntries).omit({ id: true });
 export const insertWorkoutSchema = createInsertSchema(workoutSessions).omit({ id: true });
+export const insertMindfulnessSchema = createInsertSchema(mindfulnessSessions).omit({ id: true });
 export const insertFoodLibrarySchema = createInsertSchema(foodLibrary).omit({ id: true });
 
 // Types
@@ -60,6 +70,9 @@ export type InsertFood = z.infer<typeof insertFoodSchema>;
 
 export type WorkoutSession = typeof workoutSessions.$inferSelect;
 export type InsertWorkout = z.infer<typeof insertWorkoutSchema>;
+
+export type MindfulnessSession = typeof mindfulnessSessions.$inferSelect;
+export type InsertMindfulness = z.infer<typeof insertMindfulnessSchema>;
 
 export type FoodLibraryItem = typeof foodLibrary.$inferSelect;
 export type InsertFoodLibrary = z.infer<typeof insertFoodLibrarySchema>;
