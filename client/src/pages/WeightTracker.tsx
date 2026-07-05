@@ -46,6 +46,8 @@ export default function WeightTracker() {
   const [form, setForm] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
     weight: "",
+    body_fat: "",
+    muscle_mass: "",
     notes: "",
   });
 
@@ -65,10 +67,12 @@ export default function WeightTracker() {
         date: form.date,
         weight: parseFloat(form.weight),
         note: form.notes || null,
+        body_fat: form.body_fat ? parseFloat(form.body_fat) : null,
+        muscle_mass: form.muscle_mass ? parseFloat(form.muscle_mass) : null,
       });
       await load();
       setOpen(false);
-      setForm({ date: format(new Date(), "yyyy-MM-dd"), weight: "", notes: "" });
+      setForm({ date: format(new Date(), "yyyy-MM-dd"), weight: "", body_fat: "", muscle_mass: "", notes: "" });
       toast({ title: "Weight logged ✓" });
     } finally {
       setSaving(false);
@@ -134,6 +138,26 @@ export default function WeightTracker() {
                   placeholder="e.g. 253.4"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Body Fat % <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                  <Input
+                    type="number" step="0.1" min="0" max="60"
+                    value={form.body_fat}
+                    onChange={e => setForm(f => ({ ...f, body_fat: e.target.value }))}
+                    placeholder="e.g. 18.5"
+                  />
+                </div>
+                <div>
+                  <Label>Muscle Mass (lbs) <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                  <Input
+                    type="number" step="0.1" min="0"
+                    value={form.muscle_mass}
+                    onChange={e => setForm(f => ({ ...f, muscle_mass: e.target.value }))}
+                    placeholder="e.g. 145.0"
+                  />
+                </div>
+              </div>
               <div>
                 <Label>Notes (optional)</Label>
                 <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. Post-workout, morning" />
@@ -172,6 +196,30 @@ export default function WeightTracker() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Body composition tiles — only shown when data exists */}
+      {(latest?.body_fat != null || latest?.muscle_mass != null) && (
+        <div className="grid grid-cols-2 gap-3">
+          {latest?.body_fat != null && (
+            <Card>
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Body Fat</p>
+                <p className="text-xl font-bold stat-value text-orange-500">{latest.body_fat.toFixed(1)}%</p>
+                <p className="text-xs text-muted-foreground">latest reading</p>
+              </CardContent>
+            </Card>
+          )}
+          {latest?.muscle_mass != null && (
+            <Card>
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Muscle Mass</p>
+                <p className="text-xl font-bold stat-value text-primary">{latest.muscle_mass.toFixed(1)} lbs</p>
+                <p className="text-xs text-muted-foreground">latest reading</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Progress card */}
       <Card>
@@ -274,6 +322,13 @@ export default function WeightTracker() {
                   <div key={entry.id} className="flex items-center justify-between py-2 border-b border-border last:border-0 group">
                     <div>
                       <p className="text-sm font-medium">{format(parseISO(entry.date), "EEE, MMM d")}</p>
+                      {(entry.body_fat != null || entry.muscle_mass != null) && (
+                        <p className="text-xs text-muted-foreground">
+                          {entry.body_fat != null && `BF: ${entry.body_fat.toFixed(1)}%`}
+                          {entry.body_fat != null && entry.muscle_mass != null && " · "}
+                          {entry.muscle_mass != null && `MM: ${entry.muscle_mass.toFixed(1)} lbs`}
+                        </p>
+                      )}
                       {entry.note && <p className="text-xs text-muted-foreground">{entry.note}</p>}
                     </div>
                     <div className="flex items-center gap-3">

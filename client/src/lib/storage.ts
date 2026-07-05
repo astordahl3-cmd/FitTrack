@@ -12,6 +12,8 @@ export interface WeightEntry {
   date: string;
   weight: number;
   note?: string | null;
+  body_fat?: number | null;
+  muscle_mass?: number | null;
   created_at: string;
 }
 
@@ -63,7 +65,7 @@ export async function getWeightEntries(limit = 90): Promise<WeightEntry[]> {
   return data ?? [];
 }
 
-export async function addWeight(data: { date: string; weight: number; note?: string | null }): Promise<WeightEntry> {
+export async function addWeight(data: { date: string; weight: number; note?: string | null; body_fat?: number | null; muscle_mass?: number | null }): Promise<WeightEntry> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not signed in — please log out and back in.");
   const { data: row, error } = await supabase
