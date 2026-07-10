@@ -10,6 +10,179 @@ import { useToast } from "@/hooks/use-toast";
 import { getWeightEntries, addWeight, deleteWeight, getProfile } from "@/lib/storage";
 import type { WeightEntry, UserProfile } from "@/lib/storage";
 
+function BodyCompChart({ entries }: { entries: WeightEntry[] }) {
+  // Only entries that have at least body_fat logged
+  const sorted = [...entries]
+    .filter(e => e.body_fat != null || e.muscle_mass != null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length < 2) return null;
+
+  const hasBF = sorted.some(e => e.body_fat != null);
+  const hasMM = sorted.some(e => e.muscle_mass != null);
+
+  const W = 320, H = 110;
+  const PAD = { top: 12, right: hasMM ? 44 : 12, bottom: 28, left: 36 };
+  const CW = W - PAD.left - PAD.right;
+  const CH = H - PAD.top - PAD.bottom;
+  const n = sorted.length;
+
+  // Y domains
+  const bfVals = sorted.filter(e => e.body_fat != null).map(e => e.body_fat as number);
+  const mmVals = sorted.filter(e => e.muscle_mass != null).map(e => e.muscle_mass as number);
+  const bfMin = bfVals.length ? Math.floor(Math.min(...bfVals) - 1) : 0;
+  const bfMax = bfVals.length ? Math.ceil(Math.max(...bfVals) + 1) : 40;
+  const mmMin = mmVals.length ? Math.floor(Math.min(...mmVals) - 2) : 100;
+  const mmMax = mmVals.length ? Math.ceil(Math.max(...mmVals) + 2) : 200;
+
+  const xOf = (i: number) => PAD.left + (n === 1 ? CW / 2 : (i / (n - 1)) * CW);
+  const yBF = (v: number) => PAD.top + CH - ((v - bfMin) / (bfMax - bfMin)) * CH;
+  const yMM = (v: number) => PAD.top + CH - ((v - mmMin) / (mmMax - mmMin)) * CH;
+
+  // Build polyline points, skip nulls by breaking into segments
+  const buildSegments = (pts: Array<{ x: number; y: number } | null>) => {
+    const segs: string[] = [];
+    let cur: string[] = [];
+    pts.forEach(p => {
+      if (p) {
+        cur.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+      } else {
+        if (cur.length > 1) segs.push(cur.join(" "));
+        cur = [];
+      }
+    });
+    if (cur.length > 1) segs.push(cur.join(" "));
+    return segs;
+  };
+
+  const bfPts = sorted.map((e, i) =>
+    e.body_fat != null ? { x: xOf(i), y: yBF(e.body_fat) } : null
+  );
+  const mmPts = sorted.map((e, i) =>
+    e.muscle_mass != null ? { x: xOf(i), y: yMM(e.muscle_mass) } : null
+  );
+
+  const bfSegs = buildSegments(bfPts);
+  const mmSegs = buildSegments(mmPts);
+
+  // Y-axis gridlines for BF (3–4 ticks)
+  const bfRange = bfMax - bfMin;
+  const bfStep = bfRange <= 5 ? 1 : bfRange <= 10 ? 2 : 5;
+  const bfTicks = Array.from({ length: Math.ceil(bfRange / bfStep) + 1 }, (_, i) => bfMin + i * bfStep).filter(v => v <= bfMax);
+
+  // X-axis date labels (first, last, and ~midpoint)
+  const xLabels: number[] = [0];
+  if (n > 2) xLabels.push(Math.floor((n - 1) / 2));
+  xLabels.push(n - 1);
+  const unique = [...new Set(xLabels)];
+
+  return (
+    <Card>
+      <CardHeader className="pb-1 pt-4 px-4">
+        <CardTitle className="text-sm font-semibold">Body Composition Trend</CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        {/* Legend */}
+        <div className="flex gap-4 mb-2">
+          {hasBF && (
+            <div className="flex items-center gap-1.5">
+              <svg width="16" height="4"><line x1="0" y1="2" x2="16" y2="2" stroke="hsl(22 100% 55%)" strokeWidth="2" /></svg>
+              <span className="text-xs text-muted-foreground">Body Fat %</span>
+            </div>
+          )}
+          {hasMM && (
+            <div className="flex items-center gap-1.5">
+              <svg width="16" height="4"><line x1="0" y1="2" x2="16" y2="2" stroke="hsl(174 88% 25%)" strokeWidth="2" strokeDasharray="4 2" /></svg>
+              <span className="text-xs text-muted-foreground">Muscle Mass (lbs)</span>
+            </div>
+          )}
+        </div>
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 130 }} preserveAspectRatio="xMidYMid meet">
+          {/* Gridlines + BF left Y-axis */}
+          {bfTicks.map(v => (
+            <g key={v}>
+              <line
+                x1={PAD.left} y1={yBF(v)}
+                x2={W - PAD.right} y2={yBF(v)}
+                stroke="hsl(var(--border))" strokeWidth="0.6" strokeDasharray="3 3"
+              />
+              <text
+                x={PAD.left - 4} y={yBF(v) + 3.5}
+                textAnchor="end" fontSize="7"
+                fill="hsl(var(--muted-foreground))" fontFamily="DM Sans, sans-serif"
+              >
+                {v}%
+              </text>
+            </g>
+          ))}
+
+          {/* Muscle mass right Y-axis ticks */}
+          {hasMM && (() => {
+            const mmRange = mmMax - mmMin;
+            const mmStep = mmRange <= 10 ? 2 : mmRange <= 20 ? 5 : 10;
+            const ticks = Array.from({ length: Math.ceil(mmRange / mmStep) + 1 }, (_, i) => mmMin + i * mmStep).filter(v => v <= mmMax);
+            return ticks.map(v => (
+              <text
+                key={v}
+                x={W - PAD.right + 4} y={yMM(v) + 3.5}
+                textAnchor="start" fontSize="7"
+                fill="hsl(174 88% 25%)" fontFamily="DM Sans, sans-serif"
+              >
+                {v}
+              </text>
+            ));
+          })()}
+
+          {/* Muscle mass line segments */}
+          {hasMM && mmSegs.map((pts, i) => (
+            <polyline key={i} points={pts} fill="none" stroke="hsl(174 88% 25%)"
+              strokeWidth="1.8" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+          {hasMM && mmPts.map((p, i) =>
+            p ? <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="hsl(174 88% 25%)" /> : null
+          )}
+
+          {/* Body fat line segments */}
+          {hasBF && bfSegs.map((pts, i) => (
+            <polyline key={i} points={pts} fill="none" stroke="hsl(22 100% 55%)"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+          {hasBF && bfPts.map((p, i) => {
+            if (!p) return null;
+            const entry = sorted[i];
+            const isLatest = i === sorted.length - 1;
+            return (
+              <g key={i}>
+                <circle cx={p.x} cy={p.y} r="3" fill="hsl(22 100% 55%)" />
+                {isLatest && entry.body_fat != null && (
+                  <text
+                    x={p.x} y={p.y - 6}
+                    textAnchor="middle" fontSize="7.5" fontWeight="bold"
+                    fill="hsl(22 100% 55%)" fontFamily="DM Sans, sans-serif"
+                  >
+                    {entry.body_fat.toFixed(1)}%
+                  </text>
+                )}
+              </g>
+            );
+          })}
+
+          {/* X-axis date labels */}
+          {unique.map(i => (
+            <text
+              key={i}
+              x={xOf(i)} y={H - 4}
+              textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"}
+              fontSize="7" fill="hsl(var(--muted-foreground))" fontFamily="DM Sans, sans-serif"
+            >
+              {format(parseISO(sorted[i].date), "MMM d")}
+            </text>
+          ))}
+        </svg>
+      </CardContent>
+    </Card>
+  );
+}
+
 function MiniChart({ entries, goalEnd }: { entries: WeightEntry[]; goalEnd: number }) {
   if (entries.length < 2) return null;
   const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
@@ -220,6 +393,9 @@ export default function WeightTracker() {
           )}
         </div>
       )}
+
+      {/* Body composition chart */}
+      <BodyCompChart entries={entries} />
 
       {/* Progress card */}
       <Card>
